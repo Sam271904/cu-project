@@ -170,7 +170,7 @@
 ### Task 5.1: Canonical signature + stable cluster ids
 - [x] Step 1–4: `clusterNormalizedItemsForRound` + `clusters` 表字段
 - [x] Step 5: `cluster.test.ts`（`isoWeekBucket`、同输入 `clusterId`、二次跑管线 representative/canonical 不变）
-- [ ] Step 6: Commit
+- [x] Step 6: Commit
 
 ### Task 5.2: Merge/split with alias/parent links
 - [x] Step 1: Merge v1 — `content_summary` 词袋 **Jaccard > 0.7** 则新 canonical 簇行写入 `representative_cluster_id` 指向已有**证据根簇**，`cluster_evidence` 只挂根 id（`mergeUtils.ts` + `clusterNormalizedItemsForRound`）
@@ -217,7 +217,7 @@
 - [x] Step 1: Map DecisionSignals to KnowledgeEntry with tags
 - [x] Step 2: Implement keyword/tag search (v1, deterministic ranking)
 - [x] Step 3: Integration tests for search recall/precision on fixture datasets (`backend/tests/knowledge-search.test.ts`：摘要/片段/tags 召回、同分按 `cluster_id` 排序、allow 加权、deny 过滤、`LIMIT 20`、timeline→level)
-- [ ] Step 4: Commit
+- [x] Step 4: Commit
 
 ---
 
