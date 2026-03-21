@@ -27,7 +27,7 @@
 - [ ] Step 2: Add root `package.json` with workspaces
 - [ ] Step 3: Add `tsconfig` base config and scripts (`dev`, `build`, `test`)
 - [ ] Step 4: Smoke run `pnpm -r build` (or `npm` equivalent)
-- [ ] Step 5: Commit
+- [x] Step 5: Commit
 
 ### Task 0.2: Add local dev configuration
 - [x] Step 1: 根目录 `.env.example`（`DATABASE_URL`、`PORT`、`PIH_*`、`LLM` 可选注释）
@@ -233,9 +233,9 @@
 
 ### Task 8.1: Implement subscription management endpoints
 - [ ] Step 1: Frontend: request notification permission, subscribe, POST to backend
-- [ ] Step 2: Backend: store encrypted subscription payload
-- [ ] Step 3: Backend: persist `push_permission_status` and `consent_timestamp`
-- [ ] Step 4: Implement unsubscribe (delete subscription + log)
+- [x] Step 2: Backend: `subscription_json` 支持可选加密静态存储（`PIH_PUSH_SUBSCRIPTION_SECRET`；AES-256-GCM 封装为 `enc:v1:*`，无密钥时兼容明文）
+- [x] Step 3: Backend: persist `push_permission_status` and `consent_timestamp`
+- [x] Step 4: `POST /api/push/unsubscribe` 删除订阅后写入 `push_unsubscribe_log`（`endpoint_sha256` + `deleted_rows`，不存明文 URL）；响应含 `unsubscribe_logged`
 - [ ] Step 5: Commit
 
 ### Task 8.2: Reminder trigger + dedup

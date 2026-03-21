@@ -19,4 +19,10 @@ describe('loadAppConfig', () => {
     expect(loadAppConfig({ PIH_PUSH_API_TOKEN: '' }).pushApiToken).toBeNull();
     expect(loadAppConfig({}).pushApiToken).toBeNull();
   });
+
+  it('parses PIH_PUSH_SUBSCRIPTION_SECRET (Task 8.1)', () => {
+    expect(loadAppConfig({ PIH_PUSH_SUBSCRIPTION_SECRET: '  sec  ' }).pushSubscriptionSecret).toBe('sec');
+    expect(loadAppConfig({ PIH_PUSH_SUBSCRIPTION_SECRET: '' }).pushSubscriptionSecret).toBeNull();
+    expect(loadAppConfig({}).pushSubscriptionSecret).toBeNull();
+  });
 });

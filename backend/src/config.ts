@@ -20,6 +20,8 @@ export type AppConfig = {
    * `Authorization: Bearer <token>` or `X-PIH-Token: <token>`.
    */
   pushApiToken: string | null;
+  /** Task 8.1: optional at-rest encryption secret for notification_subscriptions.subscription_json */
+  pushSubscriptionSecret: string | null;
 };
 
 function parsePort(raw: string | undefined, fallback: number): number {
@@ -34,6 +36,9 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const rawPush = env.PIH_PUSH_API_TOKEN;
   const pushApiToken =
     typeof rawPush === 'string' && rawPush.trim().length > 0 ? rawPush.trim() : null;
+  const rawSubSecret = env.PIH_PUSH_SUBSCRIPTION_SECRET;
+  const pushSubscriptionSecret =
+    typeof rawSubSecret === 'string' && rawSubSecret.trim().length > 0 ? rawSubSecret.trim() : null;
 
   return {
     port: parsePort(env.PORT, 3001),
@@ -41,5 +46,6 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     signalExtractor,
     changePolicyOverride: parseChangePolicyEnvOverride(env.PIH_CHANGE_POLICY),
     pushApiToken,
+    pushSubscriptionSecret,
   };
 }

@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer } from '../src/server';
+import { openDb } from '../src/db/db';
 
 function requestJson<T = unknown>(opts: {
   hostname: string;
@@ -57,6 +58,7 @@ describe('Task 2.2 push auth-lite (PIH_PUSH_API_TOKEN)', () => {
   let server: ReturnType<typeof createServer>;
   let port = 0;
   let dbPath = '';
+  let db: ReturnType<typeof openDb>;
   const token = 'test-push-api-token-xyz';
 
   beforeAll(async () => {
@@ -64,7 +66,9 @@ describe('Task 2.2 push auth-lite (PIH_PUSH_API_TOKEN)', () => {
     process.env.DATABASE_URL = `sqlite:${dbPath}`;
     process.env.PIH_PUSH_ENABLED = 'true';
     process.env.PIH_PUSH_API_TOKEN = token;
+    process.env.PIH_PUSH_SUBSCRIPTION_SECRET = 'test-sub-secret';
 
+    db = openDb({ databaseUrl: process.env.DATABASE_URL });
     server = createServer();
     await new Promise<void>((resolve) => {
       server.listen(0, () => {
@@ -76,7 +80,9 @@ describe('Task 2.2 push auth-lite (PIH_PUSH_API_TOKEN)', () => {
 
   afterAll(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    db.close();
     delete process.env.PIH_PUSH_API_TOKEN;
+    delete process.env.PIH_PUSH_SUBSCRIPTION_SECRET;
   });
 
   it('POST /api/push/subscribe without auth returns 401', async () => {
@@ -104,16 +110,24 @@ describe('Task 2.2 push auth-lite (PIH_PUSH_API_TOKEN)', () => {
   });
 
   it('POST /api/push/subscribe with Authorization Bearer succeeds', async () => {
+    const endpoint = 'https://example.com/ok';
     const res = await requestJson<{ success?: boolean }>({
       hostname: '127.0.0.1',
       port,
       path: '/api/push/subscribe',
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
-      body: { endpoint: 'https://example.com/ok', keys: { p256dh: 'a', auth: 'b' } },
+      body: { endpoint, keys: { p256dh: 'a', auth: 'b' } },
     });
     expect(res.status).toBe(200);
     expect(res.body?.success).toBe(true);
+
+    const row = db
+      .prepare('SELECT subscription_json FROM notification_subscriptions WHERE endpoint = ?')
+      .get(endpoint) as { subscription_json: string } | undefined;
+    expect(row).toBeTruthy();
+    expect(row!.subscription_json.startsWith('enc:v1:')).toBe(true);
+    expect(row!.subscription_json.includes(endpoint)).toBe(false);
   });
 
   it('POST /api/push/unsubscribe with X-PIH-Token succeeds', async () => {

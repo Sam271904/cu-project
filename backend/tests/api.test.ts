@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -833,11 +834,21 @@ describe('backend api', () => {
     expect(unsubRes.status).toBe(200);
     expect(unsubRes.body).not.toBeNull();
     expect(unsubRes.body?.success).toBe(true);
+    expect((unsubRes.body as { unsubscribe_logged?: boolean }).unsubscribe_logged).toBe(true);
 
     const row2 = db
       .prepare('SELECT COUNT(*) AS cnt FROM notification_subscriptions')
       .get() as { cnt: number };
     expect(row2.cnt).toBe(0);
+
+    const expectedSha = crypto.createHash('sha256').update(endpoint).digest('hex');
+    const logRow = db
+      .prepare(
+        'SELECT endpoint_sha256, deleted_rows FROM push_unsubscribe_log ORDER BY id DESC LIMIT 1',
+      )
+      .get() as { endpoint_sha256: string; deleted_rows: number };
+    expect(logRow.endpoint_sha256).toBe(expectedSha);
+    expect(logRow.deleted_rows).toBe(1);
   });
 
   it('GET /api/push/status should return subscription count and vapid flag', async () => {

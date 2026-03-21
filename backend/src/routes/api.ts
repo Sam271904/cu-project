@@ -26,6 +26,7 @@ import { loadPersonalizationProfile } from '../services/personalization/loadProf
 import { scoreClusterForPersonalization } from '../services/personalization/scoreCluster';
 import { loadAppConfig } from '../config';
 import { isPushApiAuthorized } from '../auth/pushApiToken';
+import { maybeEncryptSubscriptionJson } from '../services/push/subscriptionCrypto';
 
 type JsonValue = unknown;
 
@@ -1253,6 +1254,10 @@ export function createApiHandler(db: Database.Database) {
           keys: body?.keys,
         }
       );
+      const subscriptionJsonStored = maybeEncryptSubscriptionJson(
+        subscriptionJson,
+        appCfg.pushSubscriptionSecret,
+      );
 
       const allowedPerm = new Set(['granted', 'denied', 'default', 'unknown']);
       const rawPerm = body?.push_permission_status;
@@ -1269,7 +1274,7 @@ export function createApiHandler(db: Database.Database) {
           (endpoint, subscription_json, push_permission_status, consent_timestamp)
         VALUES (?, ?, ?, ?)
         `,
-      ).run(endpoint, subscriptionJson, pushPermissionStatus, consentTimestamp);
+      ).run(endpoint, subscriptionJsonStored, pushPermissionStatus, consentTimestamp);
 
       jsonResponse(res, 200, { success: true, push_permission_status: pushPermissionStatus });
       return;
@@ -1285,7 +1290,15 @@ export function createApiHandler(db: Database.Database) {
       }
 
       const info = db.prepare('DELETE FROM notification_subscriptions WHERE endpoint = ?').run(endpoint);
-      jsonResponse(res, 200, { success: true, deleted: info.changes });
+      const endpointSha256 = sha256Hex(endpoint);
+      db.prepare(
+        `
+        INSERT INTO push_unsubscribe_log (endpoint_sha256, deleted_rows)
+        VALUES (?, ?)
+        `,
+      ).run(endpointSha256, info.changes);
+
+      jsonResponse(res, 200, { success: true, deleted: info.changes, unsubscribe_logged: true });
       return;
     }
 

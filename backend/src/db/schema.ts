@@ -20,6 +20,14 @@ export function getCreateSchemaSql() {
     );
     `.trim(),
     `
+    CREATE TABLE IF NOT EXISTS push_unsubscribe_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at_utc TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      endpoint_sha256 TEXT NOT NULL,
+      deleted_rows INTEGER NOT NULL DEFAULT 0
+    );
+    `.trim(),
+    `
     CREATE TABLE IF NOT EXISTS notification_event_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       created_at_utc TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
