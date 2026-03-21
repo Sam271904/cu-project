@@ -232,11 +232,11 @@
 - Test: `backend/tests/push.test.ts`
 
 ### Task 8.1: Implement subscription management endpoints
-- [ ] Step 1: Frontend: request notification permission, subscribe, POST to backend
+- [x] Step 1: Frontend: request notification permission, subscribe, POST to backend（见 Task 9.3「推送」Tab）
 - [x] Step 2: Backend: `subscription_json` 支持可选加密静态存储（`PIH_PUSH_SUBSCRIPTION_SECRET`；AES-256-GCM 封装为 `enc:v1:*`，无密钥时兼容明文）
 - [x] Step 3: Backend: persist `push_permission_status` and `consent_timestamp`
 - [x] Step 4: `POST /api/push/unsubscribe` 删除订阅后写入 `push_unsubscribe_log`（`endpoint_sha256` + `deleted_rows`，不存明文 URL）；响应含 `unsubscribe_logged`
-- [ ] Step 5: Commit
+- [x] Step 5: Commit（与 Task 9.3 / 推送里程碑一并交付）
 
 ### Task 8.2: Reminder trigger + dedup
 - [x] Step 1: Pure functions — `reminderScoring.ts`（`computeEvidenceNovelty` Jaccard、`computeConclusionDeltaFromClaimHashes` v1 无 embedding、`computeConflictStrength` / `computeConflictDelta`、`computeSignificantChangeScore`）；`buildClaimTextFromDecisionSignals` 已存在于 `buildClaimText.ts`
@@ -258,11 +258,11 @@
 ### Task 9.1: Mixed homepage
 - [x] Step 1–4: `App.tsx` 首页 Tab + `/api/homepage`（决策卡、主题板、时间线；等级过滤）
 - [x] Step 5: Playwright `mvp-acceptance.spec.ts`
-- [ ] Step 6: Commit
+- [x] Step 6: Commit
 
 ### Task 9.2: Knowledge search UI
 - [x] Step 1–3: 搜索 Tab、`/api/knowledge/search`、聚类详情 + timeline evidence
-- [ ] Step 4: Commit
+- [x] Step 4: Commit
 
 ### Task 9.3: Consent + notification UI
 - [x] Step 1: Add UI to request/deny/withdraw push permissions (`App.tsx`「推送」Tab：`/api/push/consent`、`/api/push/status`、订阅/取消、`/sw.js`；可选 `PIH_PUSH_API_TOKEN` 存 `localStorage` `pih.push.apiToken`)
@@ -277,13 +277,15 @@
 
 ### Task 10.1: Evidence privacy and “no full text persistence” tests
 - [x] Step 1–3: `api.test.ts` `privacy: should enforce snippet limit and avoid disallowed full-text fields`（长 description 管线、`full_text`/`body_html`/`original_body` 键扫描、`knowledge_entries` 列）
-- [ ] Step 4: Commit
+- [x] Step 4: Commit
 
 ### Task 10.2: End-to-end MVP acceptance tests
 - [x] Step 1: Mock ingestion sources and run `/api/collect` (covered in `backend/tests/api.test.ts`)
 - [x] Step 2: Assert homepage renders and includes at least one decision card (Playwright `e2e/mvp-acceptance.spec.ts`)
 - [x] Step 3: Notification dedup across rounds (Vitest + `PIH_PUSH_ENABLED=true`; Web Push off by default in product)
-- [ ] Step 4: Commit
+- [x] Step 4: Commit
+
+**Verification（2026-03-20）：** 根目录 `npm test`（backend 103 + shared 11）通过；`npm run test:e2e`（Playwright 2）通过。
 
 ---
 
