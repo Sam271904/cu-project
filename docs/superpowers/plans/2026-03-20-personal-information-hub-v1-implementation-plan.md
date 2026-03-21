@@ -2,13 +2,27 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> NOTE: This workspace currently appears empty, so the plan initializes a fresh monorepo and creates all required files from scratch.
+> NOTE: 仓库已落地 v1 MVP；下列 **对账说明** 将计划原文与当前实现差异标出。
 
 **Goal:** Build a local always-on personal information hub that aggregates RSS/social/tech/community inputs, clusters them into event clusters, extracts structured decision signals with evidence links, displays a mixed homepage, and sends low-noise key-change reminders via browser Web Push.
 
 **Architecture:** Monorepo with `backend` (API + ingestion + clustering + signal extraction + knowledge store + Web Push) and `frontend` (homepage + search + consent UI). Shared schemas/types live in `shared/` and are validated with Zod.
 
-**Tech Stack:** TypeScript, Node.js, Fastify (backend), React + Vite (frontend) or Next.js (frontend), SQLite (local store) with migrations, Zod for schema validation, and a pluggable “LLM signal extractor” provider (cloud or local) for structured extraction.
+**Tech Stack（对账后）：** TypeScript, Node.js（`http.createServer` 手写路由，**非** Fastify）, React + Vite（**未**使用 Next.js）, SQLite（`better-sqlite3` + `backend/src/db/schema.ts` 初始化）, Zod, 可插拔 signal extractor（mock / 未来 LLM）。
+
+### 对账说明（与仓库一致 · 2026-03-20）
+
+| 计划原文 / 假设 | 当前仓库 |
+| --- | --- |
+| 后端 Fastify | `backend/src/server.ts` + `routes/api.ts` 单文件 API 分发 |
+| `frontend/public/sw.js` | **无**；`/sw.js` 由 **服务端内联** 返回（`server.ts`），保证订阅与推送演示一致 |
+| `frontend/src/pages/*`、`components/*` | **未**拆分；MVP 为单文件 `frontend/src/App.tsx` |
+| Task 2.1 表 `sources` | **无**独立表；条目在 `raw_items`，RSS 配置在 `rss_feed_configs` |
+| Task 2.1 表 `cluster_aliases` | **无**；别名通过 `clusters.representative_cluster_id` + `cluster_parents` 等表达 |
+| Task 2.1 表 `evidence_snippets` / `evidence_refs` / `evidence_links` | **无**拆表；证据链在 `decision_signals.signals_json`，时间线增量在 `cluster_timeline_state` |
+| 根目录 `pnpm -r build` | 使用 **`npm run build`**（workspaces） |
+| Task 6 `services/embeddings/*` | **未**实现目录；v1 为哈希/规则型 `claim_text` 与评分，无向量库 |
+| Task 10 `frontend/tests/*` | **无**；前端覆盖靠根目录 **Playwright** `e2e/*.spec.ts` |
 
 > **Git：** 已配置 `origin` 后，日常提交/推送与分支习惯见 `docs/git-workflow.md`。计划中各任务的 **「Commit」** 表示**适合打一次提交的里程碑**，可按需合并为一次或多次 commit。
 
@@ -23,16 +37,16 @@
 - Modify: none (new)
 
 ### Task 0.1: Initialize monorepo structure
-- [ ] Step 1: Create directories: `backend/`, `frontend/`, `shared/`
-- [ ] Step 2: Add root `package.json` with workspaces
-- [ ] Step 3: Add `tsconfig` base config and scripts (`dev`, `build`, `test`)
-- [ ] Step 4: Smoke run `pnpm -r build` (or `npm` equivalent)
+- [x] Step 1: Create directories: `backend/`, `frontend/`, `shared/`
+- [x] Step 2: Add root `package.json` with workspaces
+- [x] Step 3: Add `tsconfig` base config and scripts (`dev`, `build`, `test`)
+- [x] Step 4: Smoke run `npm run build`（等价于原 `pnpm -r build`）
 - [x] Step 5: Commit
 
 ### Task 0.2: Add local dev configuration
 - [x] Step 1: 根目录 `.env.example`（`DATABASE_URL`、`PORT`、`PIH_*`、`LLM` 可选注释）
 - [x] Step 2: `backend/src/config.ts` — `loadAppConfig()`（端口、`PIH_SIGNAL_EXTRACTOR`）；`server.ts` 入口使用
-- [ ] Step 3: Run `backend` and confirm server starts
+- [x] Step 3: Run `backend` and confirm server starts（`npm run dev -w backend` / `/health`；与 E2E、Vitest 一致）
 - [x] Step 4: Commit
 
 ---
@@ -64,7 +78,7 @@
   - `disagreementStructHash(risk_summary, opportunity_summary, dispute_summary, sides, coverage_gaps)`
   - `eventKey(representative_cluster_id)`
 - [x] Step 2: Add unit tests with known vectors (`shared/tests/ids.test.ts`)
-- [ ] Step 3: Commit
+- [x] Step 3: Commit
 
 ---
 
@@ -76,22 +90,14 @@
 - Test: `backend/tests/*`
 
 ### Task 2.1: Add database + migrations
-- [ ] Step 1: Define SQLite tables for:
-  - `sources`
-  - `raw_items`
-  - `normalized_items`
-  - `clusters` (incl. representative + created_at_utc)
-  - `cluster_aliases`, `cluster_parents`
-  - `evidence_snippets`
-  - `evidence_refs`
-  - `evidence_links`
-  - `decision_signals`
-  - `knowledge_entries` (or views mapping from decision_signals)
-  - `notification_subscriptions`
-  - `notification_event_log`
-  - `collection_rounds`
-- [ ] Step 2: Write migrations + verify schema creation
-- [ ] Step 3: Commit
+- [x] Step 1: SQLite 表已定义（见 `backend/src/db/schema.ts` + `db.ts` migrate）。与计划原文差异见 **对账说明** 表：
+  - 条目：`raw_items` / `normalized_items`；信源配置：`rss_feed_configs`（替代独立 `sources`）
+  - 聚类：`clusters`（含 `representative_cluster_id`）、`cluster_evidence`、`cluster_parents`、`cluster_split_state`
+  - 信号与知识：`decision_signals`、`knowledge_entries`；证据链在 `signals_json`（非独立 evidence_* 三表）
+  - 推送与轮次：`notification_subscriptions`、`push_unsubscribe_log`、`notification_event_log`、`collection_rounds`、`cluster_timeline_state`
+  - 个性化：`personalization_*`
+- [x] Step 2: `getCreateSchemaSql()` + `db.ts` 启动时 migrate（列补齐等）
+- [x] Step 3: Commit
 
 ### Task 2.2: Implement API endpoints (minimal UI support)
 - [x] Step 1: Create endpoints:
@@ -134,19 +140,19 @@
 - [x] Step 1: Implement RSS fetch + parse (`adapters/rss/*`, collect pipeline)
 - [x] Step 2: Dedup by `external_id` first-wins (`collectRssFromUrl`)
 - [x] Step 3: Unit tests (`rss-parser.test.ts`, `rss-collect.test.ts`)
-- [ ] Step 4: Commit
+- [x] Step 4: Commit
 
 ### Task 3.2: Social adapter via user-provided RSS (B)
 - [x] Step 1: Social feeds via `rss_feed_configs` + `/api/collect` / `useStoredFeeds`
 - [x] Step 2: `source_type: social` in collect path
 - [x] Step 3: Covered by collect/parser tests + API ingest tests
-- [ ] Step 4: Commit
+- [x] Step 4: Commit
 
 ### Task 3.3: Tech community adapter (D)
 - [x] Step 1: `adapters/tech/knownFeeds.ts` — `HACKER_NEWS_FRONT_PAGE_RSS`、`githubReleasesAtomUrl(owner,repo)`（采集仍走既有 `source_type: tech` + RSS 管线）
 - [x] Step 2: 与社媒相同 `parseRssXml` → `raw_items`（用户在信源中粘贴 HN URL 即可）
 - [x] Step 3: `tests/tech-hn-rss.test.ts`（HN 形 fixture，无网络）
-- [ ] Step 4: Commit
+- [x] Step 4: Commit
 
 ---
 
@@ -158,7 +164,7 @@
 ### Task 4.1: Normalize fields and de-noise templates
 - [x] Step 1–3: `normalizeRawItem` / `normalizeText`（摘录长度、社媒/技术/书签前缀规则）
 - [x] Step 4: `normalize.test.ts`
-- [ ] Step 5: Commit
+- [x] Step 5: Commit
 
 ---
 
@@ -182,7 +188,7 @@
 
 ### Task 5.3: Determine `cluster_kind` (event_update vs topic_drift)
 - [x] Step 1–2: `extractSignalsForRound` + `cluster_timeline_state`（证据集 hash 变化 → `event_update`，否则 `topic_drift`）；`clusterKindFromDeltas` 纯函数单测
-- [ ] Step 3: Commit
+- [x] Step 3: Commit
 
 ---
 
@@ -190,13 +196,13 @@
 - [x] **Persist gate:** `extractSignalsForRound` 在写入 `decision_signals` 前用 `@e-cu/shared` 的 `DecisionSignalsSchema` 校验（与 Zod v1 结构对齐）。
 **Files:**
 - Create: `backend/src/services/signal_extraction/*`
-- Create: `backend/src/services/embeddings/*` (optional, with deterministic interface)
+- ~~`backend/src/services/embeddings/*`~~ — v1 **未**建目录；对账见上表
 - Test: `backend/tests/signal_extraction.test.ts`
 
 ### Task 6.1: Define deterministic claim_text for embeddings
 - [x] Step 1: `buildClaimTextFromDecisionSignals`（`services/signal_extraction/buildClaimText.ts`，与设计稿公式一致）
 - [x] Step 2: `backend/tests/signal_extraction.test.ts`
-- [ ] Step 3: Commit
+- [x] Step 3: Commit
 
 ### Task 6.2: Implement extractor prompt + JSON schema validation
 - [x] Step 1（部分）: `decisionSignalsBuilder.ts` — 占位抽取与证据链构造可复用；**真实 LLM prompt** 仍待接
@@ -204,7 +210,7 @@
 - [x] Step 3: `decision_signals` 存储（已有）
 - [x] Step 4: change policy `C` — `PIH_CHANGE_POLICY` 全局覆盖；否则按本轮簇内证据 `source_type`：`bookmark`→`USER_OVERRIDE`，仅 `tech`→`SOURCE_TRUSTED`，含 `social`→`EVIDENCE_WEIGHTED`，默认 `LATEST_WINS`（`changePolicyResolver.ts` + `extractSignalsForRound`）
 - [x] Step 5: **Mock 路径** — `PIH_SIGNAL_EXTRACTOR=mock|mock_llm` 或 `extractSignalsForRound(..., { forceMockOverlay: true })` 给结构化 summary 加 `[mock_llm]` 前缀；`tests/extractSignals-mock.test.ts`
-- [ ] Step 6: Commit
+- [x] Step 6: Commit
 
 ---
 
@@ -225,10 +231,10 @@
 > 与浏览器订阅、Service Worker 产品面相关的工作延后；后端通知队列与 `PIH_PUSH_ENABLED` 测试可保留，不作为近期交付阻塞。
 
 ## Task 8: Web Push (Service Worker + subscriptions + dedup)
-**Files:**
-- Create: `frontend/public/sw.js` (service worker)
-- Create: `frontend/src/push/*`
-- Create: `backend/src/services/push/*`
+**Files（对账后）：**
+- `Service Worker`：`/sw.js` 由 **`backend/src/server.ts` 内联**（非 `frontend/public/`）
+- 前端订阅 UI：`frontend/src/App.tsx`「推送」Tab（**无** `frontend/src/push/*` 目录）
+- 后端：`backend/src/services/notifications/*`、`backend/src/services/push/*`（如 `subscriptionCrypto`）等
 - Test: `backend/tests/push.test.ts`
 
 ### Task 8.1: Implement subscription management endpoints
@@ -251,9 +257,7 @@
 ---
 
 ## Task 9: Frontend (mixed homepage + timeline + search + consent)
-**Files:**
-- Create: `frontend/src/pages/*`
-- Create: `frontend/src/components/*` (cards, topic board, timeline list)
+**Files（对账后）：** MVP 为 `frontend/src/App.tsx`（Tab：首页 / 搜索 / 信源 / 个性化 / 推送）；**未**拆 `pages/`、`components/`。
 
 ### Task 9.1: Mixed homepage
 - [x] Step 1–4: `App.tsx` 首页 Tab + `/api/homepage`（决策卡、主题板、时间线；等级过滤）
@@ -272,8 +276,7 @@
 ---
 
 ## Task 10: Verification, privacy assertions, and end-to-end tests
-**Files:**
-- Modify: `backend/tests/*`, `frontend/tests/*`, `shared/tests/*`
+**Files（对账后）：** `backend/tests/*`、`shared/tests/*`、根目录 `e2e/*`（**无** `frontend/tests/`）
 
 ### Task 10.1: Evidence privacy and “no full text persistence” tests
 - [x] Step 1–3: `api.test.ts` `privacy: should enforce snippet limit and avoid disallowed full-text fields`（长 description 管线、`full_text`/`body_html`/`original_body` 键扫描、`knowledge_entries` 列）
