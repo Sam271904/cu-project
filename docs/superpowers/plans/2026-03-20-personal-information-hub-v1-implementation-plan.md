@@ -239,36 +239,13 @@
 - [ ] Step 5: Commit
 
 ### Task 8.2: Reminder trigger + dedup
-- [ ] Step 1: Implement reminder scoring as pure, unit-testable functions:
-  - `computeEvidenceNovelty(evidence_ref_ids_old, evidence_ref_ids_new) -> [0,1]` (Jaccard)
-  - `buildClaimTextFromDecisionSignals(decisionSignals) -> claim_text` (deterministic, no EvidenceSnippet.snippet_text)
-  - `computeConclusionDelta(claim_embedding_old, claim_embedding_new) -> [0,1]`
-  - `computeConflictStrength(conflict_links) -> [0,1]` using `contradicts/supports` link_confidence sums
-  - `computeConflictDelta(strength_old, strength_new) -> [0,1]` with `clamp(new-old,0,1)`
-  - `computeSignificantChangeScore(score_parts, w1/w2/w3) -> [0,1]`
-- [ ] Step 2: Map `significant_change_score` to `reminder_level` with v1 thresholds:
-  - `high >= 0.8`
-  - `medium in [0.5, 0.8)`
-- [ ] Step 3: Apply `topic_drift` push exception from spec:
-  - default: no Web Push for `topic_drift`
-  - exception: allow Web Push when `reminder_level == high` AND the `w3*conflict_delta` component is the dominant contributor (e.g., `w3*conflict_delta >= max(w1*evidence_novelty, w2*conclusion_delta)`)
-- [ ] Step 4: Compute dedup identifiers deterministically:
-  - `event_key = representative_cluster_id`
-  - `evidence_ref_ids = sorted(union of (EvidenceRef.normalized_item_id + "|" + EvidenceRef.extractor_version) across all evidence_links)`
-  - `signal_fingerprint = SHA-256_hex(...)` using evidence_ref_ids and structured hashes
-- [ ] Step 5: Enforce push rate limit: `max_push_per_event_key = 1 per 7 days` via `NotificationEventLog`
-- [ ] Step 6: Backend sends Web Push payload with strict keyset:
-  - payload keys MUST be exactly: `event_key`, `reminder_level`, `title`, `short_summary`
-  - `short_summary` MUST come only from structured summaries (`change_summary/risk_summary/...`) and MUST NOT vary when only `EvidenceSnippet.snippet_text` changes
-- [ ] Step 7: Integration tests with seeded decision signals verifying:
-  - identical signals do not push repeatedly (dedup + fingerprint)
-  - payload has strict keyset equality
-  - payload never contains `snippet_text`
-  - topic_drift exception allow: when `reminder_level == high` and `w3*conflict_delta` is dominant, topic_drift should push
-  - topic_drift exception block: when `reminder_level == high` but `w3*conflict_delta` is NOT dominant, topic_drift should not push
-  - short_summary invariance: changing only `EvidenceSnippet.snippet_text` (while keeping structured summaries identical) must keep payload `short_summary` unchanged
-  - boundary tests for score mapping (0.8, 0.799, 0.5, 0.499)
-  - cooldown tests: second push within 7 days is blocked; after 7 days allowed
+- [x] Step 1: Pure functions — `reminderScoring.ts`（`computeEvidenceNovelty` Jaccard、`computeConclusionDeltaFromClaimHashes` v1 无 embedding、`computeConflictStrength` / `computeConflictDelta`、`computeSignificantChangeScore`）；`buildClaimTextFromDecisionSignals` 已存在于 `buildClaimText.ts`
+- [x] Step 2: `mapScoreToReminderLevel` — `high >= 0.8`，`medium ∈ [0.5, 0.8)`；`reminderScoring.test.ts` 边界用例
+- [x] Step 3: `topic_drift` — `shouldQueueWebPushNotification`：`event_update` 照常入队；`topic_drift` 仅当 `reminder_level === high` 且 `w3*conflict_delta` 主导（`topicDriftConflictDominates`）
+- [x] Step 4: `event_key = resolveEvidenceRootClusterId`；`signal_fingerprint` 使用 `@e-cu/shared` 的 `signalFingerprint` + `disagreementStructHash`（`decisionSignalsFingerprint.ts`）；`cluster_timeline_state` 增加 `evidence_ref_ids_json` / `claim_text_hash` / `conflict_strength` 供跨轮比较
+- [x] Step 5: 7 天去重 — 沿用 `notification_event_log` + `datetime(?, '-7 days')`（与 `event_key`、新 fingerprint 配合）
+- [x] Step 6: `buildPushPayload` + `dispatchQueuedNotifications` 严格四键；`short_summary` 仅来自 `change_summary`（占位管线）
+- [ ] Step 7: 集成测试矩阵（dedup / topic_drift 双路径 / snippet 不变性等）— **部分完成**：`reminderScoring.test.ts` 边界 + `api.test.ts` 多轮采集去重；其余可补 `push.test.ts`
 - [ ] Step 8: Commit
 
 ---

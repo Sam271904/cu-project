@@ -3,6 +3,20 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { getCreateSchemaSql } from './schema';
 
+function migrateClusterTimelineState(db: Database.Database): void {
+  const rows = db.prepare(`PRAGMA table_info(cluster_timeline_state)`).all() as Array<{ name: string }>;
+  const names = new Set(rows.map((r) => r.name));
+  if (!names.has('evidence_ref_ids_json')) {
+    db.exec(`ALTER TABLE cluster_timeline_state ADD COLUMN evidence_ref_ids_json TEXT`);
+  }
+  if (!names.has('claim_text_hash')) {
+    db.exec(`ALTER TABLE cluster_timeline_state ADD COLUMN claim_text_hash TEXT`);
+  }
+  if (!names.has('conflict_strength')) {
+    db.exec(`ALTER TABLE cluster_timeline_state ADD COLUMN conflict_strength REAL`);
+  }
+}
+
 export type DbOpenOptions = {
   databaseUrl?: string;
 };
@@ -31,6 +45,8 @@ export function openDb(options?: DbOpenOptions): Database.Database {
   for (const sql of statements) {
     db.exec(sql);
   }
+
+  migrateClusterTimelineState(db);
 
   return db;
 }

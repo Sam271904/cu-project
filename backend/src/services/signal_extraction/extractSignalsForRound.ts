@@ -12,6 +12,8 @@ import {
   buildPlaceholderDecisionSignals,
 } from './decisionSignalsBuilder';
 import { isMockSignalExtractor } from './signalExtractorMode';
+import { computeClaimTextHashFromDecisionSignals } from '../notifications/decisionSignalsFingerprint';
+import { computeConflictStrengthFromDisagreement } from '../notifications/reminderScoring';
 
 function sha256Hex(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex');
@@ -101,9 +103,9 @@ export async function extractSignalsForRound(
   const stmtUpsertTimeline = db.prepare(
     `
     INSERT OR REPLACE INTO cluster_timeline_state
-      (collection_round_id, cluster_id, evidence_set_hash, cluster_kind)
+      (collection_round_id, cluster_id, evidence_set_hash, cluster_kind, evidence_ref_ids_json, claim_text_hash, conflict_strength)
     VALUES
-      (?, ?, ?, ?)
+      (?, ?, ?, ?, ?, ?, ?)
     `,
   );
 
@@ -137,8 +139,6 @@ export async function extractSignalsForRound(
         ? String(evidenceRow.content_summary).trim()
         : `cluster_${c.cluster_id.slice(0, 8)}`;
 
-    stmtUpsertTimeline.run(roundId, c.cluster_id, evidenceSetHash, cluster_kind);
-
     const sourceTypeRows = stmtDistinctSourceTypes.all(c.cluster_id, roundId) as Array<{ source_type: string }>;
     const changePolicy = resolveChangePolicyFromSourceTypes(
       sourceTypeRows.map((r) => r.source_type),
@@ -162,6 +162,21 @@ export async function extractSignalsForRound(
     if (!validated.success) {
       throw new Error(`decision_signals_schema_invalid: ${validated.error.message}`);
     }
+
+    const ds = validated.data;
+    const claimHash = computeClaimTextHashFromDecisionSignals(ds);
+    const conflictStrength = computeConflictStrengthFromDisagreement(ds.disagreement);
+    const evidenceRefIdsJson = JSON.stringify(evidenceRefIdsSorted);
+
+    stmtUpsertTimeline.run(
+      roundId,
+      c.cluster_id,
+      evidenceSetHash,
+      cluster_kind,
+      evidenceRefIdsJson,
+      claimHash,
+      conflictStrength,
+    );
 
     stmtUpsert.run(
       decisionSignals.cluster_id,
