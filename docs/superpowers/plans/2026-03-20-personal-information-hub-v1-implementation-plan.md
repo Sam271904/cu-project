@@ -205,7 +205,7 @@
 - [x] Step 3: Commit
 
 ### Task 6.2: Implement extractor prompt + JSON schema validation
-- [x] Step 1（部分）: `decisionSignalsBuilder.ts` — 占位抽取与证据链构造可复用；**真实 LLM prompt** 仍待接
+- [x] Step 1（部分）: `decisionSignalsBuilder.ts` — 占位抽取与证据链构造可复用；**可选** OpenAI 兼容 LLM：`PIH_SIGNAL_EXTRACTOR=openai_compatible` + `PIH_LLM_API_KEY` / `OPENAI_API_KEY`，`llmOpenAiCompatible.ts` 仅重写摘要字段，证据链仍本地生成；失败回退占位
 - [x] Step 2: 落库前 `DecisionSignalsSchema.safeParse`（已有）
 - [x] Step 3: `decision_signals` 存储（已有）
 - [x] Step 4: change policy `C` — `PIH_CHANGE_POLICY` 全局覆盖；否则按本轮簇内证据 `source_type`：`bookmark`→`USER_OVERRIDE`，仅 `tech`→`SOURCE_TRUSTED`，含 `social`→`EVIDENCE_WEIGHTED`，默认 `LATEST_WINS`（`changePolicyResolver.ts` + `extractSignalsForRound`）

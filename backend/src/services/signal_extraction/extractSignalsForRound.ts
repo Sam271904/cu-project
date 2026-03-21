@@ -5,15 +5,19 @@ import { DecisionSignalsSchema } from '@e-cu/shared';
 
 import { loadAppConfig } from '../../config';
 import { resolveChangePolicyFromSourceTypes } from './changePolicyResolver';
+import { truncateWithEllipsis } from '../normalize/normalizeText';
 import {
   EVIDENCE_EXTRACTOR_VERSION,
   applyMockExtractorOverlay,
   buildEvidenceLinksFromNormalizedRow,
   buildPlaceholderDecisionSignals,
 } from './decisionSignalsBuilder';
+import { buildUserPrompt, fetchLlmSummariesOpenAiCompatible, mergeLlmSummariesIntoDecisionSignals } from './llmOpenAiCompatible';
 import { isMockSignalExtractor } from './signalExtractorMode';
 import { computeClaimTextHashFromDecisionSignals } from '../notifications/decisionSignalsFingerprint';
 import { computeConflictStrengthFromDisagreement } from '../notifications/reminderScoring';
+
+let warnedOpenAiNoApiKey = false;
 
 function sha256Hex(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex');
@@ -109,8 +113,28 @@ export async function extractSignalsForRound(
     `,
   );
 
+  const stmtEvidenceLinesForLlm = db.prepare(
+    `
+    SELECT n.content_summary, n.content_text_or_excerpt
+    FROM normalized_items n
+    JOIN cluster_evidence ce ON ce.normalized_item_id = n.id
+    WHERE ce.cluster_id = ? AND n.collection_round_id = ?
+    ORDER BY n.id ASC
+    LIMIT 10
+    `,
+  );
+
   const mockMode = opts?.forceMockOverlay === true || isMockSignalExtractor();
-  const { changePolicyOverride } = loadAppConfig();
+  const appCfg = loadAppConfig();
+  const { changePolicyOverride } = appCfg;
+
+  if (appCfg.signalExtractor === 'openai_compatible' && !appCfg.llmApiKey && !warnedOpenAiNoApiKey) {
+    warnedOpenAiNoApiKey = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[pih] PIH_SIGNAL_EXTRACTOR=openai_compatible but PIH_LLM_API_KEY / OPENAI_API_KEY is unset; using placeholder summaries',
+    );
+  }
 
   for (const c of clusters) {
     const evidenceRow = stmtFirstEvidence.get(c.cluster_id, roundId) as Record<string, unknown> | undefined;
@@ -153,6 +177,41 @@ export async function extractSignalsForRound(
       clusterLabel,
       changePolicy,
     });
+
+    if (appCfg.signalExtractor === 'openai_compatible' && appCfg.llmApiKey) {
+      try {
+        const evRows = stmtEvidenceLinesForLlm.all(c.cluster_id, roundId) as Array<{
+          content_summary: string;
+          content_text_or_excerpt: string;
+        }>;
+        const bullets = evRows.map((r) => {
+          const sum = truncateWithEllipsis(String(r.content_summary ?? ''), 220);
+          const ex = truncateWithEllipsis(String(r.content_text_or_excerpt ?? ''), 420);
+          return ex ? `${sum} — ${ex}` : sum;
+        });
+        if (bullets.length > 0) {
+          const userPrompt = buildUserPrompt({
+            uiLang,
+            clusterLabel,
+            changePolicy: String(changePolicy),
+            evidenceBullets: bullets,
+          });
+          const summaries = await fetchLlmSummariesOpenAiCompatible(
+            {
+              apiKey: appCfg.llmApiKey,
+              baseUrl: appCfg.llmBaseUrl,
+              model: appCfg.llmModel,
+              useJsonObjectResponseFormat: appCfg.llmJsonObjectResponseFormat,
+            },
+            userPrompt,
+          );
+          decisionSignals = mergeLlmSummariesIntoDecisionSignals(decisionSignals, summaries);
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[pih] openai_compatible signal extraction failed; using placeholder summaries', e);
+      }
+    }
 
     if (mockMode) {
       applyMockExtractorOverlay(decisionSignals);
