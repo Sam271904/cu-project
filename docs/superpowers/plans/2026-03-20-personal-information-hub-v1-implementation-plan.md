@@ -245,7 +245,7 @@
 - [x] Step 4: `event_key = resolveEvidenceRootClusterId`；`signal_fingerprint` 使用 `@e-cu/shared` 的 `signalFingerprint` + `disagreementStructHash`（`decisionSignalsFingerprint.ts`）；`cluster_timeline_state` 增加 `evidence_ref_ids_json` / `claim_text_hash` / `conflict_strength` 供跨轮比较
 - [x] Step 5: 7 天去重 — 沿用 `notification_event_log` + `datetime(?, '-7 days')`（与 `event_key`、新 fingerprint 配合）
 - [x] Step 6: `buildPushPayload` + `dispatchQueuedNotifications` 严格四键；`short_summary` 仅来自 `change_summary`（占位管线）
-- [ ] Step 7: 集成测试矩阵（dedup / topic_drift 双路径 / snippet 不变性等）— **部分完成**：`reminderScoring.test.ts` 边界 + `api.test.ts` 多轮采集去重；其余可补 `push.test.ts`
+- [x] Step 7: `backend/tests/push.test.ts` 覆盖 dedup+cooldown、payload 严格键集且无 `snippet_text`、`topic_drift` 阻断路径、以及“仅 snippet 变化时 short_summary 不变”
 - [x] Step 8: Commit
 
 ---
