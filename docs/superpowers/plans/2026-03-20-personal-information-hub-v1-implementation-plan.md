@@ -102,7 +102,7 @@
   - `GET /api/push/consent`
 - [x] Step 2: auth-lite — 非空 `PIH_PUSH_API_TOKEN` 时，`POST` `subscribe` / `unsubscribe` / `enqueue-test` / `send` 需 `Authorization: Bearer` 或 `X-PIH-Token`（`auth/pushApiToken.ts` + `loadAppConfig`）；未设置 token 时保持本地开发无头认证
 - [x] Step 3: `push-auth.test.ts`、`pushApiToken.test.ts`；既有 `api.test.ts` push 用例在未设 token 时仍通过
-- [ ] Step 4: Commit
+- [x] Step 4: Commit
 
 ---
 
