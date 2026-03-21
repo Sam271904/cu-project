@@ -3,8 +3,10 @@ import {
   computeConflictDelta,
   computeConflictStrengthFromDisagreement,
   computeConclusionDeltaFromClaimHashes,
+  computeConclusionDeltaFromEmbeddings,
   computeEvidenceNovelty,
   computeSignificantChangeScore,
+  cosineSimilarity,
   mapScoreToReminderLevel,
   shouldQueueWebPushNotification,
   topicDriftConflictDominates,
@@ -96,5 +98,15 @@ describe('reminderScoring (Task 8.2)', () => {
   it('computeSignificantChangeScore default weights', () => {
     const s = computeSignificantChangeScore(1, 1, 0.5);
     expect(s).toBeCloseTo(0.4 + 0.4 + 0.1, 5);
+  });
+
+  it('cosineSimilarity and embedding conclusion_delta', () => {
+    const a = [1, 0, 0];
+    const b = [1, 0, 0];
+    expect(cosineSimilarity(a, b)).toBeCloseTo(1, 5);
+    expect(computeConclusionDeltaFromEmbeddings(a, b)).toBeCloseTo(0, 5);
+    const c = [0, 1, 0];
+    expect(cosineSimilarity(a, c)).toBeCloseTo(0, 5);
+    expect(computeConclusionDeltaFromEmbeddings(a, c)).toBeCloseTo(1, 5);
   });
 });

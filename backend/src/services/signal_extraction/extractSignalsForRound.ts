@@ -4,7 +4,10 @@ import crypto from 'node:crypto';
 import { DecisionSignalsSchema } from '@e-cu/shared';
 
 import { loadAppConfig } from '../../config';
+import { clusterKindFromSignals } from '../cluster/clusterNormalizedItemsForRound';
 import { resolveChangePolicyFromSourceTypes } from './changePolicyResolver';
+import { buildClaimTextFromDecisionSignals } from './buildClaimText';
+import { fetchClaimEmbeddingOpenAiCompatible, parseEmbeddingJson } from './claimEmbeddingOpenAi';
 import { truncateWithEllipsis } from '../normalize/normalizeText';
 import {
   EVIDENCE_EXTRACTOR_VERSION,
@@ -15,9 +18,15 @@ import {
 import { buildUserPrompt, fetchLlmSummariesOpenAiCompatible, mergeLlmSummariesIntoDecisionSignals } from './llmOpenAiCompatible';
 import { isMockSignalExtractor } from './signalExtractorMode';
 import { computeClaimTextHashFromDecisionSignals } from '../notifications/decisionSignalsFingerprint';
-import { computeConflictStrengthFromDisagreement } from '../notifications/reminderScoring';
+import {
+  computeConflictDelta,
+  computeConflictStrengthFromDisagreement,
+  computeConclusionDeltaFromClaimHashes,
+  computeConclusionDeltaFromEmbeddings,
+} from '../notifications/reminderScoring';
 
 let warnedOpenAiNoApiKey = false;
+let warnedEmbeddingNoApiKey = false;
 
 function sha256Hex(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex');
@@ -96,7 +105,7 @@ export async function extractSignalsForRound(
 
   const stmtPrevTimeline = db.prepare(
     `
-    SELECT evidence_set_hash, cluster_kind
+    SELECT evidence_set_hash, claim_text_hash, claim_embedding_json, conflict_strength
     FROM cluster_timeline_state
     WHERE cluster_id = ? AND collection_round_id < ?
     ORDER BY collection_round_id DESC
@@ -107,9 +116,9 @@ export async function extractSignalsForRound(
   const stmtUpsertTimeline = db.prepare(
     `
     INSERT OR REPLACE INTO cluster_timeline_state
-      (collection_round_id, cluster_id, evidence_set_hash, cluster_kind, evidence_ref_ids_json, claim_text_hash, conflict_strength)
+      (collection_round_id, cluster_id, evidence_set_hash, cluster_kind, evidence_ref_ids_json, claim_text_hash, conflict_strength, claim_embedding_json)
     VALUES
-      (?, ?, ?, ?, ?, ?, ?)
+      (?, ?, ?, ?, ?, ?, ?, ?)
     `,
   );
 
@@ -135,6 +144,13 @@ export async function extractSignalsForRound(
       '[pih] PIH_SIGNAL_EXTRACTOR=openai_compatible but PIH_LLM_API_KEY / OPENAI_API_KEY is unset; using placeholder summaries',
     );
   }
+  if (appCfg.claimEmbeddingEnabled && !appCfg.llmApiKey && !warnedEmbeddingNoApiKey) {
+    warnedEmbeddingNoApiKey = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[pih] PIH_CLAIM_EMBEDDING enabled but PIH_LLM_API_KEY / OPENAI_API_KEY is unset; skipping embeddings',
+    );
+  }
 
   for (const c of clusters) {
     const evidenceRow = stmtFirstEvidence.get(c.cluster_id, roundId) as Record<string, unknown> | undefined;
@@ -148,10 +164,13 @@ export async function extractSignalsForRound(
     const evidenceCount = evidenceExternalIds.length;
 
     const prev = stmtPrevTimeline.get(c.cluster_id, roundId) as
-      | { evidence_set_hash: string; cluster_kind: string }
+      | {
+          evidence_set_hash: string;
+          claim_text_hash: string | null;
+          claim_embedding_json: string | null;
+          conflict_strength: number | null;
+        }
       | undefined;
-    const isChanged = prev ? prev.evidence_set_hash !== evidenceSetHash : false;
-    const cluster_kind = isChanged ? 'event_update' : 'topic_drift';
 
     const evidence_links = buildEvidenceLinksFromNormalizedRow({
       ...evidenceRow,
@@ -227,6 +246,43 @@ export async function extractSignalsForRound(
     const conflictStrength = computeConflictStrengthFromDisagreement(ds.disagreement);
     const evidenceRefIdsJson = JSON.stringify(evidenceRefIdsSorted);
 
+    let claimEmbeddingJson: string | null = null;
+    let newEmbeddingVec: number[] | null = null;
+    if (appCfg.claimEmbeddingEnabled && appCfg.llmApiKey) {
+      try {
+        const claimText = buildClaimTextFromDecisionSignals(ds);
+        newEmbeddingVec = await fetchClaimEmbeddingOpenAiCompatible(
+          {
+            apiKey: appCfg.llmApiKey,
+            baseUrl: appCfg.llmBaseUrl,
+            model: appCfg.embeddingModel,
+          },
+          claimText,
+        );
+        claimEmbeddingJson = JSON.stringify(newEmbeddingVec);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[pih] claim embedding failed; using hash-only conclusion delta', e);
+      }
+    }
+
+    const oldEmb = parseEmbeddingJson(prev?.claim_embedding_json ?? null);
+    const conclusionDeltaForKind =
+      oldEmb && newEmbeddingVec && oldEmb.length === newEmbeddingVec.length
+        ? computeConclusionDeltaFromEmbeddings(oldEmb, newEmbeddingVec)
+        : computeConclusionDeltaFromClaimHashes(prev?.claim_text_hash ?? null, claimHash);
+
+    const conflictDeltaForKind = computeConflictDelta(prev?.conflict_strength ?? null, conflictStrength);
+    const evidence_changed = Boolean(prev && prev.evidence_set_hash !== evidenceSetHash);
+    // No prior timeline row: establish baseline as topic_drift (avoids treating "first claim" as event_update for push noise).
+    const cluster_kind = !prev
+      ? 'topic_drift'
+      : clusterKindFromSignals({
+          evidence_changed,
+          conclusion_delta: conclusionDeltaForKind,
+          conflict_delta: conflictDeltaForKind,
+        });
+
     stmtUpsertTimeline.run(
       roundId,
       c.cluster_id,
@@ -235,6 +291,7 @@ export async function extractSignalsForRound(
       evidenceRefIdsJson,
       claimHash,
       conflictStrength,
+      claimEmbeddingJson,
     );
 
     stmtUpsert.run(

@@ -15,6 +15,9 @@ function migrateClusterTimelineState(db: Database.Database): void {
   if (!names.has('conflict_strength')) {
     db.exec(`ALTER TABLE cluster_timeline_state ADD COLUMN conflict_strength REAL`);
   }
+  if (!names.has('claim_embedding_json')) {
+    db.exec(`ALTER TABLE cluster_timeline_state ADD COLUMN claim_embedding_json TEXT`);
+  }
 }
 
 export type DbOpenOptions = {

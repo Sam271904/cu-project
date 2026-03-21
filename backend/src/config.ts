@@ -41,6 +41,13 @@ export type AppConfig = {
   reminderHighThreshold: number;
   /** Default 0.5 — `medium` band is [medium, high) */
   reminderMediumThreshold: number;
+  /**
+   * When true and `llmApiKey` set: fetch claim_text embedding (`POST .../embeddings`) for conclusion_delta cosine path.
+   * `PIH_CLAIM_EMBEDDING=1`
+   */
+  claimEmbeddingEnabled: boolean;
+  /** Default `text-embedding-3-small` */
+  embeddingModel: string;
 };
 
 function parsePort(raw: string | undefined, fallback: number): number {
@@ -118,6 +125,15 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
 
   const th = parseReminderThresholdsFromEnv(env);
 
+  const ce = String(env.PIH_CLAIM_EMBEDDING ?? '').toLowerCase();
+  const claimEmbeddingEnabled = ce === '1' || ce === 'true' || ce === 'yes';
+
+  const embeddingModelRaw = env.PIH_EMBEDDING_MODEL;
+  const embeddingModel =
+    typeof embeddingModelRaw === 'string' && embeddingModelRaw.trim().length > 0
+      ? embeddingModelRaw.trim()
+      : 'text-embedding-3-small';
+
   return {
     port: parsePort(env.PORT, 3001),
     databaseUrl: env.DATABASE_URL,
@@ -132,5 +148,7 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     reminderWeights: parseReminderWeightsFromEnv(env),
     reminderHighThreshold: th.highMin,
     reminderMediumThreshold: th.mediumMin,
+    claimEmbeddingEnabled,
+    embeddingModel,
   };
 }

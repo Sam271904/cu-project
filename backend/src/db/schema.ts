@@ -149,6 +149,7 @@ export function getCreateSchemaSql() {
       evidence_ref_ids_json TEXT,
       claim_text_hash TEXT,
       conflict_strength REAL,
+      claim_embedding_json TEXT,
       created_at_utc TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
       UNIQUE(collection_round_id, cluster_id),
       FOREIGN KEY (cluster_id) REFERENCES clusters(cluster_id),

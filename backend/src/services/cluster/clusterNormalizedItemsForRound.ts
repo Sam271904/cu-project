@@ -60,6 +60,18 @@ export function clusterKindFromDeltas({ conclusion_delta, conflict_delta }: Clus
   return 'topic_drift';
 }
 
+/** Design: event_update if evidence set changed OR conclusion_delta≥0.6 OR conflict_delta≥0.5 */
+export function clusterKindFromSignals(opts: {
+  evidence_changed: boolean;
+  conclusion_delta: number;
+  conflict_delta: number;
+}): 'event_update' | 'topic_drift' {
+  if (opts.evidence_changed) return 'event_update';
+  if (opts.conclusion_delta >= 0.6) return 'event_update';
+  if (opts.conflict_delta >= 0.5) return 'event_update';
+  return 'topic_drift';
+}
+
 /** Follow representative_cluster_id chain to storage root (evidence lives here). */
 export function resolveEvidenceRootClusterId(db: Database.Database, clusterId: string): string {
   const seen = new Set<string>();

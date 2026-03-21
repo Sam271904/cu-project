@@ -4,9 +4,11 @@ import { loadAppConfig } from '../../config';
 import { resolveEvidenceRootClusterId } from '../cluster/clusterNormalizedItemsForRound';
 import { computeSignalFingerprintFromSignalsJson } from './decisionSignalsFingerprint';
 import { buildPushPayload } from './buildPushPayload';
+import { parseEmbeddingJson } from '../signal_extraction/claimEmbeddingOpenAi';
 import {
   computeConflictDelta,
   computeConclusionDeltaFromClaimHashes,
+  computeConclusionDeltaFromEmbeddings,
   computeEvidenceNovelty,
   computeSignificantChangeScore,
   mapScoreToReminderLevel,
@@ -48,7 +50,7 @@ export async function computeAndStoreNotificationsForRound(
 
   const stmtCurrentTimeline = db.prepare(
     `
-    SELECT evidence_ref_ids_json, claim_text_hash, conflict_strength, cluster_kind
+    SELECT evidence_ref_ids_json, claim_text_hash, claim_embedding_json, conflict_strength, cluster_kind
     FROM cluster_timeline_state
     WHERE collection_round_id = ? AND cluster_id = ?
     `,
@@ -56,7 +58,7 @@ export async function computeAndStoreNotificationsForRound(
 
   const stmtPrevTimeline = db.prepare(
     `
-    SELECT evidence_ref_ids_json, claim_text_hash, conflict_strength
+    SELECT evidence_ref_ids_json, claim_text_hash, claim_embedding_json, conflict_strength
     FROM cluster_timeline_state
     WHERE cluster_id = ? AND collection_round_id < ?
     ORDER BY collection_round_id DESC
@@ -102,6 +104,7 @@ export async function computeAndStoreNotificationsForRound(
       | {
           evidence_ref_ids_json: string | null;
           claim_text_hash: string | null;
+          claim_embedding_json: string | null;
           conflict_strength: number | null;
           cluster_kind: string;
         }
@@ -112,6 +115,7 @@ export async function computeAndStoreNotificationsForRound(
       | {
           evidence_ref_ids_json: string | null;
           claim_text_hash: string | null;
+          claim_embedding_json: string | null;
           conflict_strength: number | null;
         }
       | undefined;
@@ -119,7 +123,12 @@ export async function computeAndStoreNotificationsForRound(
     const oldRefs = parseRefIdsJson(prev?.evidence_ref_ids_json);
     const newRefs = parseRefIdsJson(cur.evidence_ref_ids_json);
     const evidence_novelty = computeEvidenceNovelty(oldRefs, newRefs);
-    const conclusion_delta = computeConclusionDeltaFromClaimHashes(prev?.claim_text_hash ?? null, cur.claim_text_hash ?? '');
+    const oldEmb = parseEmbeddingJson(prev?.claim_embedding_json ?? null);
+    const curEmb = parseEmbeddingJson(cur.claim_embedding_json ?? null);
+    const conclusion_delta =
+      oldEmb && curEmb && oldEmb.length === curEmb.length
+        ? computeConclusionDeltaFromEmbeddings(oldEmb, curEmb)
+        : computeConclusionDeltaFromClaimHashes(prev?.claim_text_hash ?? null, cur.claim_text_hash ?? '');
     const newStrength = cur.conflict_strength ?? 0;
     const oldStrength = prev?.conflict_strength ?? null;
     const conflict_delta = computeConflictDelta(oldStrength, newStrength);

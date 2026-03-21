@@ -15,6 +15,33 @@ export function computeConclusionDeltaFromClaimHashes(oldHash: string | null, ne
   return oldHash === newHash ? 0 : 1;
 }
 
+/** Cosine similarity in [-1,1] for equal-length vectors. */
+export function cosineSimilarity(a: readonly number[], b: readonly number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0;
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  const d = Math.sqrt(na) * Math.sqrt(nb);
+  return d === 0 ? 0 : dot / d;
+}
+
+/**
+ * Design: conclusion_delta = 1 - cosine_sim(claim_embedding_old, claim_embedding_new), in [0,1].
+ * Missing or mismatched dims → treat as full change (1).
+ */
+export function computeConclusionDeltaFromEmbeddings(oldVec: readonly number[] | null, newVec: readonly number[] | null): number {
+  if (!newVec || newVec.length === 0) return 1;
+  if (!oldVec || oldVec.length === 0) return 1;
+  if (oldVec.length !== newVec.length) return 1;
+  const cos = cosineSimilarity(oldVec, newVec);
+  return Math.min(1, Math.max(0, 1 - cos));
+}
+
 /** Spec: contradict_conf / (contradict_conf + support_conf + 1e-9) */
 export function computeConflictStrengthFromDisagreement(disagreement: {
   evidence_links: ReadonlyArray<{ role: string; link_confidence: number }>;

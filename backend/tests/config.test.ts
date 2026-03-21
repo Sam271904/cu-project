@@ -72,6 +72,16 @@ describe('loadAppConfig', () => {
     });
   });
 
+  it('parses claim embedding flags', () => {
+    const c = loadAppConfig({
+      PIH_CLAIM_EMBEDDING: '1',
+      PIH_EMBEDDING_MODEL: 'text-embedding-ada-002',
+      PIH_LLM_API_KEY: 'k',
+    });
+    expect(c.claimEmbeddingEnabled).toBe(true);
+    expect(c.embeddingModel).toBe('text-embedding-ada-002');
+  });
+
   it('loadAppConfig exposes reminder policy', () => {
     const c = loadAppConfig({
       PIH_REMINDER_W1: '2',

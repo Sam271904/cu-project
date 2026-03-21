@@ -986,6 +986,8 @@ export function createApiHandler(db: Database.Database) {
         weights: appCfgDemo.reminderWeights,
         high_threshold: appCfgDemo.reminderHighThreshold,
         medium_threshold: appCfgDemo.reminderMediumThreshold,
+        claim_embedding_enabled: appCfgDemo.claimEmbeddingEnabled && Boolean(appCfgDemo.llmApiKey),
+        embedding_model: appCfgDemo.embeddingModel,
       };
 
       const latestRound = db
@@ -1249,6 +1251,8 @@ export function createApiHandler(db: Database.Database) {
           weights: appCfgPush.reminderWeights,
           high_threshold: appCfgPush.reminderHighThreshold,
           medium_threshold: appCfgPush.reminderMediumThreshold,
+          claim_embedding_enabled: appCfgPush.claimEmbeddingEnabled && Boolean(appCfgPush.llmApiKey),
+          embedding_model: appCfgPush.embeddingModel,
         },
       });
       return;
