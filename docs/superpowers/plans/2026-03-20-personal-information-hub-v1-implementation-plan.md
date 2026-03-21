@@ -10,6 +10,8 @@
 
 **Tech Stack:** TypeScript, Node.js, Fastify (backend), React + Vite (frontend) or Next.js (frontend), SQLite (local store) with migrations, Zod for schema validation, and a pluggable “LLM signal extractor” provider (cloud or local) for structured extraction.
 
+> **Git：** 已配置 `origin` 后，日常提交/推送与分支习惯见 `docs/git-workflow.md`。计划中各任务的 **「Commit」** 表示**适合打一次提交的里程碑**，可按需合并为一次或多次 commit。
+
 ---
 
 ## Task 0: Repo + environment scaffolding
