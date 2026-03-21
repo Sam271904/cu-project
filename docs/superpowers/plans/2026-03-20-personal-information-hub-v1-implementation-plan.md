@@ -33,7 +33,7 @@
 - [x] Step 1: 根目录 `.env.example`（`DATABASE_URL`、`PORT`、`PIH_*`、`LLM` 可选注释）
 - [x] Step 2: `backend/src/config.ts` — `loadAppConfig()`（端口、`PIH_SIGNAL_EXTRACTOR`）；`server.ts` 入口使用
 - [ ] Step 3: Run `backend` and confirm server starts
-- [ ] Step 4: Commit
+- [x] Step 4: Commit
 
 ---
 
@@ -54,7 +54,7 @@
   - rejects any `EvidenceSnippet.snippet_text > 600`
   - rejects `extracted_spans` containing text fields
 - [x] Step 3: Run `shared` tests
-- [ ] Step 4: Commit
+- [x] Step 4: Commit
 
 ### Task 1.2: Add deterministic identifiers
 - [x] Step 1: Implement pure functions:
