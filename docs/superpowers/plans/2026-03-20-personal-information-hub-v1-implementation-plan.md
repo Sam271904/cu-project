@@ -246,7 +246,7 @@
 - [x] Step 5: 7 天去重 — 沿用 `notification_event_log` + `datetime(?, '-7 days')`（与 `event_key`、新 fingerprint 配合）
 - [x] Step 6: `buildPushPayload` + `dispatchQueuedNotifications` 严格四键；`short_summary` 仅来自 `change_summary`（占位管线）
 - [ ] Step 7: 集成测试矩阵（dedup / topic_drift 双路径 / snippet 不变性等）— **部分完成**：`reminderScoring.test.ts` 边界 + `api.test.ts` 多轮采集去重；其余可补 `push.test.ts`
-- [ ] Step 8: Commit
+- [x] Step 8: Commit
 
 ---
 
