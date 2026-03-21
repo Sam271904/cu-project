@@ -1,0 +1,31 @@
+{
+  "name": "e-cu",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w backend",
+    "build": "npm run build -ws --if-present",
+    "test": "npm run test -ws --if-present",
+    "e2e:server": "npm run build -w @e-cu/frontend && cross-env DATABASE_URL=sqlite:./data/e2e-playwright.db PORT=3456 npm run dev -w backend",
+    "test:e2e": "playwright test",
+    "test:e2e:install-browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "cross-env": "^7.0.3",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  },
+  "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  }
+}
