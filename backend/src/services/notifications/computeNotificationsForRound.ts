@@ -1,10 +1,10 @@
 import type Database from 'better-sqlite3';
 
+import { loadAppConfig } from '../../config';
 import { resolveEvidenceRootClusterId } from '../cluster/clusterNormalizedItemsForRound';
 import { computeSignalFingerprintFromSignalsJson } from './decisionSignalsFingerprint';
 import { buildPushPayload } from './buildPushPayload';
 import {
-  DEFAULT_REMINDER_WEIGHTS,
   computeConflictDelta,
   computeConclusionDeltaFromClaimHashes,
   computeEvidenceNovelty,
@@ -86,7 +86,12 @@ export async function computeAndStoreNotificationsForRound(
   const highIds: string[] = [];
   const mediumIds: string[] = [];
 
-  const w = DEFAULT_REMINDER_WEIGHTS;
+  const appCfg = loadAppConfig();
+  const w = appCfg.reminderWeights;
+  const scoreThresholds = {
+    highMin: appCfg.reminderHighThreshold,
+    mediumMin: appCfg.reminderMediumThreshold,
+  };
 
   for (const { cluster_id } of clusterRows) {
     const dsRow = stmtLoad.get(cluster_id) as { signal_schema_version: string; signals_json: string } | undefined;
@@ -126,7 +131,7 @@ export async function computeAndStoreNotificationsForRound(
       w,
     );
 
-    const reminder_level = mapScoreToReminderLevel(significant_change_score);
+    const reminder_level = mapScoreToReminderLevel(significant_change_score, scoreThresholds);
 
     const cluster_kind = cur.cluster_kind === 'event_update' ? 'event_update' : 'topic_drift';
 

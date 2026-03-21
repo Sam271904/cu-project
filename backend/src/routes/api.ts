@@ -981,6 +981,13 @@ export function createApiHandler(db: Database.Database) {
     }
 
     if (url === '/api/demo/status' && method === 'GET') {
+      const appCfgDemo = loadAppConfig();
+      const notification_policy = {
+        weights: appCfgDemo.reminderWeights,
+        high_threshold: appCfgDemo.reminderHighThreshold,
+        medium_threshold: appCfgDemo.reminderMediumThreshold,
+      };
+
       const latestRound = db
         .prepare('SELECT MAX(id) as maxId FROM collection_rounds')
         .get() as { maxId: number | null };
@@ -995,6 +1002,7 @@ export function createApiHandler(db: Database.Database) {
           decision_signals: 0,
           knowledge_entries: 0,
           cluster_kind_summary: {},
+          notification_policy,
         });
         return;
       }
@@ -1183,6 +1191,7 @@ export function createApiHandler(db: Database.Database) {
         cluster_kind_summary: clusterKindSummary,
         privacy_checks: privacyChecks,
         notification_counts: notificationCounts,
+        notification_policy,
       });
       return;
     }
@@ -1231,10 +1240,16 @@ export function createApiHandler(db: Database.Database) {
     if (url === '/api/push/status' && method === 'GET') {
       const row = db.prepare('SELECT COUNT(*) AS cnt FROM notification_subscriptions').get() as { cnt: number };
       const vapidConfigured = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+      const appCfgPush = loadAppConfig();
       jsonResponse(res, 200, {
         success: true,
         subscription_count: row.cnt,
         vapid_configured: vapidConfigured,
+        notification_policy: {
+          weights: appCfgPush.reminderWeights,
+          high_threshold: appCfgPush.reminderHighThreshold,
+          medium_threshold: appCfgPush.reminderMediumThreshold,
+        },
       });
       return;
     }

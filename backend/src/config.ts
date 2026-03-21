@@ -1,6 +1,7 @@
 import type { ChangePolicy } from '@e-cu/shared';
 
 import { parseChangePolicyEnvOverride } from './services/signal_extraction/changePolicyResolver';
+import { DEFAULT_REMINDER_WEIGHTS, type ReminderWeights } from './services/notifications/reminderScoring';
 
 /**
  * Documented environment variables (Task 0.2 / 2.2). No hard failure on missing optional keys.
@@ -31,6 +32,15 @@ export type AppConfig = {
   llmModel: string;
   /** When false, omit `response_format` (some gateways reject it) */
   llmJsonObjectResponseFormat: boolean;
+  /**
+   * Design: `significant_change_score = w1*evidence_novelty + w2*conclusion_delta + w3*conflict_delta` (sum normalized to 1).
+   * Env: `PIH_REMINDER_W1`, `PIH_REMINDER_W2`, `PIH_REMINDER_W3` (optional; unset = defaults 0.4/0.4/0.2).
+   */
+  reminderWeights: ReminderWeights;
+  /** Default 0.8 — score ≥ this ⇒ reminder_level `high` */
+  reminderHighThreshold: number;
+  /** Default 0.5 — `medium` band is [medium, high) */
+  reminderMediumThreshold: number;
 };
 
 function parsePort(raw: string | undefined, fallback: number): number {
@@ -49,6 +59,38 @@ function parseLlmApiKey(env: NodeJS.ProcessEnv): string | null {
   const a = env.PIH_LLM_API_KEY ?? env.OPENAI_API_KEY;
   if (typeof a === 'string' && a.trim().length > 0) return a.trim();
   return null;
+}
+
+/** Parse w1/w2/w3; if any set, normalize to sum=1. */
+export function parseReminderWeightsFromEnv(env: NodeJS.ProcessEnv): ReminderWeights {
+  const raw = [env.PIH_REMINDER_W1, env.PIH_REMINDER_W2, env.PIH_REMINDER_W3];
+  const hasAny = raw.some((x) => x !== undefined && String(x).trim() !== '');
+  if (!hasAny) {
+    return { ...DEFAULT_REMINDER_WEIGHTS };
+  }
+  const parse = (s: string | undefined, fallback: number): number => {
+    if (s === undefined || String(s).trim() === '') return fallback;
+    const v = Number(s);
+    return Number.isFinite(v) && v >= 0 ? v : fallback;
+  };
+  let w1 = parse(env.PIH_REMINDER_W1, DEFAULT_REMINDER_WEIGHTS.w1);
+  let w2 = parse(env.PIH_REMINDER_W2, DEFAULT_REMINDER_WEIGHTS.w2);
+  let w3 = parse(env.PIH_REMINDER_W3, DEFAULT_REMINDER_WEIGHTS.w3);
+  const sum = w1 + w2 + w3;
+  if (sum <= 0) return { ...DEFAULT_REMINDER_WEIGHTS };
+  return { w1: w1 / sum, w2: w2 / sum, w3: w3 / sum };
+}
+
+/** Defaults high=0.8, medium=0.5; invalid combos fall back. */
+export function parseReminderThresholdsFromEnv(env: NodeJS.ProcessEnv): { highMin: number; mediumMin: number } {
+  const high = Number(env.PIH_REMINDER_HIGH_THRESHOLD);
+  const med = Number(env.PIH_REMINDER_MEDIUM_THRESHOLD);
+  const highMin = Number.isFinite(high) && high > 0 && high <= 1 ? high : 0.8;
+  const mediumMin = Number.isFinite(med) && med > 0 && med < 1 ? med : 0.5;
+  if (mediumMin >= highMin) {
+    return { highMin: 0.8, mediumMin: 0.5 };
+  }
+  return { highMin, mediumMin };
 }
 
 export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -74,6 +116,8 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const jsonFmt = String(env.PIH_LLM_JSON_OBJECT ?? '1').toLowerCase();
   const llmJsonObjectResponseFormat = jsonFmt !== '0' && jsonFmt !== 'false' && jsonFmt !== 'no';
 
+  const th = parseReminderThresholdsFromEnv(env);
+
   return {
     port: parsePort(env.PORT, 3001),
     databaseUrl: env.DATABASE_URL,
@@ -85,5 +129,8 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     llmBaseUrl,
     llmModel,
     llmJsonObjectResponseFormat,
+    reminderWeights: parseReminderWeightsFromEnv(env),
+    reminderHighThreshold: th.highMin,
+    reminderMediumThreshold: th.mediumMin,
   };
 }

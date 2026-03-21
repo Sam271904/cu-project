@@ -47,6 +47,13 @@ describe('reminderScoring (Task 8.2)', () => {
     expect(mapScoreToReminderLevel(0.499)).toBe(null);
   });
 
+  it('mapScoreToReminderLevel respects custom thresholds', () => {
+    const t = { highMin: 0.7, mediumMin: 0.35 };
+    expect(mapScoreToReminderLevel(0.7, t)).toBe('high');
+    expect(mapScoreToReminderLevel(0.69, t)).toBe('medium');
+    expect(mapScoreToReminderLevel(0.34, t)).toBe(null);
+  });
+
   it('topicDriftConflictDominates', () => {
     const w = { w1: 0.4, w2: 0.4, w3: 0.2 };
     expect(topicDriftConflictDominates(0.1, 0.1, 1, w)).toBe(true);

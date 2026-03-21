@@ -58,6 +58,11 @@ export function App() {
     decision_signals: number;
     knowledge_entries: number;
     cluster_kind_summary: Record<string, number>;
+    notification_policy?: {
+      weights: { w1: number; w2: number; w3: number };
+      high_threshold: number;
+      medium_threshold: number;
+    };
     privacy_checks?: {
       pass: boolean;
       details: {
@@ -1382,6 +1387,17 @@ export function App() {
             {demoStatus.privacy_checks?.details
               ? `(${`signal_snippet_max=${demoStatus.privacy_checks.details.max_signal_snippet_length}, knowledge_snippet_max=${demoStatus.privacy_checks.details.max_knowledge_snippet_length}`})`
               : ''}
+            {demoStatus.notification_policy ? (
+              <>
+                {' · '}
+                reminder w1/w2/w3=
+                {demoStatus.notification_policy.weights.w1.toFixed(2)}/
+                {demoStatus.notification_policy.weights.w2.toFixed(2)}/
+                {demoStatus.notification_policy.weights.w3.toFixed(2)} · high≥
+                {demoStatus.notification_policy.high_threshold} · med≥
+                {demoStatus.notification_policy.medium_threshold}
+              </>
+            ) : null}
           </div>
         ) : (
           <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>{t.noStatus}</div>

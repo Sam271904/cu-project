@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { loadAppConfig } from '../src/config';
+import {
+  loadAppConfig,
+  parseReminderThresholdsFromEnv,
+  parseReminderWeightsFromEnv,
+} from '../src/config';
 
 describe('loadAppConfig', () => {
   it('parses signal extractor modes', () => {
@@ -42,5 +46,42 @@ describe('loadAppConfig', () => {
     expect(loadAppConfig({ PIH_PUSH_SUBSCRIPTION_SECRET: '  sec  ' }).pushSubscriptionSecret).toBe('sec');
     expect(loadAppConfig({ PIH_PUSH_SUBSCRIPTION_SECRET: '' }).pushSubscriptionSecret).toBeNull();
     expect(loadAppConfig({}).pushSubscriptionSecret).toBeNull();
+  });
+
+  it('parses reminder weights (Task 8.2 NotificationPolicy)', () => {
+    const w = parseReminderWeightsFromEnv({
+      PIH_REMINDER_W1: '0.5',
+      PIH_REMINDER_W2: '0.3',
+      PIH_REMINDER_W3: '0.2',
+    });
+    expect(w.w1 + w.w2 + w.w3).toBeCloseTo(1, 5);
+    expect(w.w1).toBeCloseTo(0.5, 5);
+    expect(parseReminderWeightsFromEnv({}).w1).toBeCloseTo(0.4, 5);
+  });
+
+  it('parses reminder thresholds and rejects invalid order', () => {
+    expect(
+      parseReminderThresholdsFromEnv({ PIH_REMINDER_HIGH_THRESHOLD: '0.85', PIH_REMINDER_MEDIUM_THRESHOLD: '0.45' }),
+    ).toEqual({
+      highMin: 0.85,
+      mediumMin: 0.45,
+    });
+    expect(parseReminderThresholdsFromEnv({ PIH_REMINDER_HIGH_THRESHOLD: '0.3', PIH_REMINDER_MEDIUM_THRESHOLD: '0.8' })).toEqual({
+      highMin: 0.8,
+      mediumMin: 0.5,
+    });
+  });
+
+  it('loadAppConfig exposes reminder policy', () => {
+    const c = loadAppConfig({
+      PIH_REMINDER_W1: '2',
+      PIH_REMINDER_W2: '2',
+      PIH_REMINDER_W3: '1',
+      PIH_REMINDER_HIGH_THRESHOLD: '0.75',
+      PIH_REMINDER_MEDIUM_THRESHOLD: '0.4',
+    });
+    expect(c.reminderWeights.w1 + c.reminderWeights.w2 + c.reminderWeights.w3).toBeCloseTo(1, 5);
+    expect(c.reminderHighThreshold).toBe(0.75);
+    expect(c.reminderMediumThreshold).toBe(0.4);
   });
 });

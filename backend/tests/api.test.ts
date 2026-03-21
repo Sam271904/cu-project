@@ -516,6 +516,8 @@ describe('backend api', () => {
     expect(demoStatus.body?.privacy_checks?.details.has_forbidden_json_keys).toBe(false);
     expect((demoStatus.body?.privacy_checks?.details.max_signal_snippet_length ?? 0)).toBeLessThanOrEqual(600);
     expect((demoStatus.body?.privacy_checks?.details.max_knowledge_snippet_length ?? 0)).toBeLessThanOrEqual(600);
+    expect(demoStatus.body?.notification_policy?.weights?.w1).toBeDefined();
+    expect(demoStatus.body?.notification_policy?.high_threshold).toBeDefined();
   });
 
   it('POST /api/collect should ingest 1 social RSS + 1 tech RSS with first-wins dedup', async () => {

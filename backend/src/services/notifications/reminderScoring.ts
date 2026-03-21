@@ -37,19 +37,30 @@ export function computeConflictDelta(oldStrength: number | null, newStrength: nu
 
 export const DEFAULT_REMINDER_WEIGHTS = { w1: 0.4, w2: 0.4, w3: 0.2 } as const;
 
+export type ReminderWeights = { w1: number; w2: number; w3: number };
+
 export function computeSignificantChangeScore(
   evidence_novelty: number,
   conclusion_delta: number,
   conflict_delta: number,
-  weights: { w1: number; w2: number; w3: number } = DEFAULT_REMINDER_WEIGHTS,
+  weights: ReminderWeights = DEFAULT_REMINDER_WEIGHTS,
 ): number {
   const { w1, w2, w3 } = weights;
   return w1 * evidence_novelty + w2 * conclusion_delta + w3 * conflict_delta;
 }
 
-export function mapScoreToReminderLevel(score: number): ReminderLevel | null {
-  if (score >= 0.8) return 'high';
-  if (score >= 0.5) return 'medium';
+export type ReminderThresholds = { highMin: number; mediumMin: number };
+
+const DEFAULT_THRESHOLDS: ReminderThresholds = { highMin: 0.8, mediumMin: 0.5 };
+
+/** Spec: high ≥ highMin (default 0.8), medium ∈ [mediumMin, highMin) (default medium 0.5). */
+export function mapScoreToReminderLevel(
+  score: number,
+  thresholds: ReminderThresholds = DEFAULT_THRESHOLDS,
+): ReminderLevel | null {
+  const { highMin, mediumMin } = thresholds;
+  if (score >= highMin) return 'high';
+  if (score >= mediumMin) return 'medium';
   return null;
 }
 
@@ -58,7 +69,7 @@ export function topicDriftConflictDominates(
   evidence_novelty: number,
   conclusion_delta: number,
   conflict_delta: number,
-  weights: { w1: number; w2: number; w3: number } = DEFAULT_REMINDER_WEIGHTS,
+  weights: ReminderWeights = DEFAULT_REMINDER_WEIGHTS,
 ): boolean {
   const { w1, w2, w3 } = weights;
   const w3c = w3 * conflict_delta;
@@ -71,7 +82,7 @@ export function shouldQueueWebPushNotification(opts: {
   evidence_novelty: number;
   conclusion_delta: number;
   conflict_delta: number;
-  weights?: { w1: number; w2: number; w3: number };
+  weights?: ReminderWeights;
 }): boolean {
   if (!opts.reminder_level) return false;
   const w = opts.weights ?? DEFAULT_REMINDER_WEIGHTS;
