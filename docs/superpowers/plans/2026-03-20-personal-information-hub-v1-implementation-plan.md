@@ -100,8 +100,8 @@
   - `GET /api/knowledge/search?q=&tags=`（`tags` 逗号分隔，OR 匹配解析后的 `tags_json`；无 tag 时 `LIMIT 20`，有 tag 时先拉至多 100 条再过滤再截断 20）
   - `POST /api/push/subscribe` and `POST /api/push/unsubscribe`
   - `GET /api/push/consent`
-- [ ] Step 2: Add simple session/auth-lite token for push subscription endpoints
-- [ ] Step 3: Write integration tests verifying request/response shapes with mocked data
+- [x] Step 2: auth-lite — 非空 `PIH_PUSH_API_TOKEN` 时，`POST` `subscribe` / `unsubscribe` / `enqueue-test` / `send` 需 `Authorization: Bearer` 或 `X-PIH-Token`（`auth/pushApiToken.ts` + `loadAppConfig`）；未设置 token 时保持本地开发无头认证
+- [x] Step 3: `push-auth.test.ts`、`pushApiToken.test.ts`；既有 `api.test.ts` push 用例在未设 token 时仍通过
 - [ ] Step 4: Commit
 
 ---

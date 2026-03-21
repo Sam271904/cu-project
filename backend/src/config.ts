@@ -15,6 +15,11 @@ export type AppConfig = {
    * Otherwise resolved per cluster from evidence `source_type` in `extractSignalsForRound`.
    */
   changePolicyOverride: ChangePolicy | null;
+  /**
+   * Task 2.2: when non-empty, `POST /api/push/subscribe|unsubscribe|enqueue-test|send` require
+   * `Authorization: Bearer <token>` or `X-PIH-Token: <token>`.
+   */
+  pushApiToken: string | null;
 };
 
 function parsePort(raw: string | undefined, fallback: number): number {
@@ -26,10 +31,15 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const se = String(env.PIH_SIGNAL_EXTRACTOR ?? 'placeholder').toLowerCase();
   const signalExtractor: 'placeholder' | 'mock' = se === 'mock' || se === 'mock_llm' ? 'mock' : 'placeholder';
 
+  const rawPush = env.PIH_PUSH_API_TOKEN;
+  const pushApiToken =
+    typeof rawPush === 'string' && rawPush.trim().length > 0 ? rawPush.trim() : null;
+
   return {
     port: parsePort(env.PORT, 3001),
     databaseUrl: env.DATABASE_URL,
     signalExtractor,
     changePolicyOverride: parseChangePolicyEnvOverride(env.PIH_CHANGE_POLICY),
+    pushApiToken,
   };
 }

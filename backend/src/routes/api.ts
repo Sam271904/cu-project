@@ -24,6 +24,8 @@ import {
 } from '../services/bookmarks/bookmarkIds';
 import { loadPersonalizationProfile } from '../services/personalization/loadProfile';
 import { scoreClusterForPersonalization } from '../services/personalization/scoreCluster';
+import { loadAppConfig } from '../config';
+import { isPushApiAuthorized } from '../auth/pushApiToken';
 
 type JsonValue = unknown;
 
@@ -82,11 +84,23 @@ async function runIngestionPipeline(
 }
 
 export function createApiHandler(db: Database.Database) {
+  const appCfg = loadAppConfig();
+
   return async function handleApiRequest(req: http.IncomingMessage, res: http.ServerResponse) {
     const rawUrl = req.url ?? '';
     const url = rawUrl.split('?')[0] ?? '';
     const method = (req.method ?? 'GET').toUpperCase();
     const normalizeLang = (v: unknown): 'zh' | 'en' => (String(v ?? '').toLowerCase().startsWith('zh') ? 'zh' : 'en');
+
+    const assertPushApiAuth = (): boolean => {
+      if (isPushApiAuthorized(req, appCfg.pushApiToken)) return true;
+      jsonResponse(res, 401, {
+        success: false,
+        error: 'unauthorized',
+        hint: 'Provide Authorization: Bearer <PIH_PUSH_API_TOKEN> or X-PIH-Token header',
+      });
+      return false;
+    };
 
     if (url === '/api/feeds' && method === 'GET') {
       const rows = db
@@ -1174,6 +1188,7 @@ export function createApiHandler(db: Database.Database) {
 
     if (
       (url === '/api/push/status' ||
+        url === '/api/push/consent' ||
         url === '/api/push/subscribe' ||
         url === '/api/push/unsubscribe' ||
         url === '/api/push/vapid-public-key' ||
@@ -1185,6 +1200,29 @@ export function createApiHandler(db: Database.Database) {
         success: false,
         error: 'push_disabled',
         hint: 'Web Push is disabled in this build. Set PIH_PUSH_ENABLED=true to enable push APIs.',
+      });
+      return;
+    }
+
+    if (url === '/api/push/consent' && method === 'GET') {
+      const row = db
+        .prepare(
+          `
+          SELECT push_permission_status, consent_timestamp, created_at_utc
+          FROM notification_subscriptions
+          ORDER BY datetime(created_at_utc) DESC
+          LIMIT 1
+          `,
+        )
+        .get() as
+        | { push_permission_status: string; consent_timestamp: string | null; created_at_utc: string }
+        | undefined;
+      jsonResponse(res, 200, {
+        success: true,
+        has_subscription: Boolean(row),
+        push_permission_status: row?.push_permission_status ?? 'unknown',
+        consent_timestamp: row?.consent_timestamp ?? null,
+        last_subscription_at_utc: row?.created_at_utc ?? null,
       });
       return;
     }
@@ -1201,6 +1239,7 @@ export function createApiHandler(db: Database.Database) {
     }
 
     if (url === '/api/push/subscribe' && method === 'POST') {
+      if (!assertPushApiAuth()) return;
       const body = (await readJsonBody(req)) as any;
       const endpoint: string | undefined = body?.endpoint ?? body?.subscription?.endpoint;
       if (!endpoint) {
@@ -1237,6 +1276,7 @@ export function createApiHandler(db: Database.Database) {
     }
 
     if (url === '/api/push/unsubscribe' && method === 'POST') {
+      if (!assertPushApiAuth()) return;
       const body = (await readJsonBody(req)) as any;
       const endpoint: string | undefined = body?.endpoint ?? body?.subscription?.endpoint;
       if (!endpoint) {
@@ -1260,6 +1300,7 @@ export function createApiHandler(db: Database.Database) {
     }
 
     if (url === '/api/push/enqueue-test' && method === 'POST') {
+      if (!assertPushApiAuth()) return;
       const body = (await readJsonBody(req)) as any;
       const reminder_level = body?.reminder_level === 'medium' ? 'medium' : 'high';
       const event_key = `manual_test_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -1285,6 +1326,7 @@ export function createApiHandler(db: Database.Database) {
     }
 
     if (url === '/api/push/send' && method === 'POST') {
+      if (!assertPushApiAuth()) return;
       const body = (await readJsonBody(req)) as any;
       const mode = (body?.mode === 'real' ? 'real' : 'simulate') as 'simulate' | 'real';
       const limitRaw = body?.limit;

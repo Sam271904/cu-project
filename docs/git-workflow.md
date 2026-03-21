@@ -44,3 +44,11 @@ npm test
 ```
 
 根目录 `package.json` 的 workspaces 会依次构建/测试 `shared`、`backend`、`frontend`（若配置了脚本）。
+
+## Push API 与 `PIH_PUSH_API_TOKEN`
+
+若设置了 `PIH_PUSH_API_TOKEN`，浏览器或脚本在调用 `POST /api/push/subscribe` 等接口时需带：
+
+`Authorization: Bearer <token>` 或 `X-PIH-Token: <token>`。
+
+未设置时保持本地开发无额外头（与 `PIH_PUSH_ENABLED=true` 配合）。详见 `.env.example`。
