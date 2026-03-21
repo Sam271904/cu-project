@@ -265,9 +265,9 @@
 - [ ] Step 4: Commit
 
 ### Task 9.3: Consent + notification UI
-- [ ] Step 1: Add UI to request/deny/withdraw push permissions (**deferred**: current release ships without Web Push product surface; set `PIH_PUSH_ENABLED=true` to use push APIs)
-- [ ] Step 2: Validate UX with backend consent endpoints (deferred with Step 1)
-- [ ] Step 3: Commit
+- [x] Step 1: Add UI to request/deny/withdraw push permissions (`App.tsx`「推送」Tab：`/api/push/consent`、`/api/push/status`、订阅/取消、`/sw.js`；可选 `PIH_PUSH_API_TOKEN` 存 `localStorage` `pih.push.apiToken`)
+- [x] Step 2: Validate UX with backend consent endpoints (与 `GET /api/push/consent`、`POST /api/push/subscribe|unsubscribe` 对齐；503/401 提示)
+- [x] Step 3: Commit
 
 ---
 
