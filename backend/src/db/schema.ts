@@ -55,6 +55,19 @@ export function getCreateSchemaSql() {
       author TEXT,
       language TEXT NOT NULL,
       timestamp_quality TEXT NOT NULL,
+      source_metadata_json TEXT,
+      FOREIGN KEY(collection_round_id) REFERENCES collection_rounds(id)
+    );
+    `.trim(),
+    `
+    CREATE TABLE IF NOT EXISTS hn_position_tracking (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hn_id INTEGER NOT NULL,
+      collection_round_id INTEGER NOT NULL,
+      position INTEGER NOT NULL,
+      velocity INTEGER,
+      fetched_at TEXT NOT NULL,
+      UNIQUE(hn_id, collection_round_id),
       FOREIGN KEY(collection_round_id) REFERENCES collection_rounds(id)
     );
     `.trim(),
@@ -165,7 +178,21 @@ export function getCreateSchemaSql() {
       source_name TEXT,
       enabled INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
+      muted_until_utc TEXT,
       created_at_utc TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    `.trim(),
+    `
+    CREATE TABLE IF NOT EXISTS rss_feed_health_state (
+      feed_url TEXT PRIMARY KEY,
+      last_round_id INTEGER,
+      total_fetches INTEGER NOT NULL DEFAULT 0,
+      total_successes INTEGER NOT NULL DEFAULT 0,
+      total_failures INTEGER NOT NULL DEFAULT 0,
+      consecutive_failures INTEGER NOT NULL DEFAULT 0,
+      last_status TEXT NOT NULL DEFAULT 'unknown',
+      last_error TEXT,
+      last_checked_at_utc TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     );
     `.trim(),
     `
@@ -192,6 +219,33 @@ export function getCreateSchemaSql() {
       sentiment INTEGER NOT NULL DEFAULT 0,
       saved INTEGER NOT NULL DEFAULT 0,
       updated_at_utc TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    `.trim(),
+    `
+    CREATE TABLE IF NOT EXISTS pipeline_round_metrics (
+      round_id INTEGER PRIMARY KEY,
+      notifications_high INTEGER NOT NULL DEFAULT 0,
+      notifications_medium INTEGER NOT NULL DEFAULT 0,
+      rss_feed_failures INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (round_id) REFERENCES collection_rounds(id)
+    );
+    `.trim(),
+    `
+    CREATE TABLE IF NOT EXISTS app_runtime_settings (
+      setting_key TEXT PRIMARY KEY,
+      setting_value TEXT NOT NULL,
+      updated_at_utc TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+    );
+    `.trim(),
+    `
+    CREATE TABLE IF NOT EXISTS notification_policy_change_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      changed_at_utc TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      high_threshold_before REAL NOT NULL,
+      high_threshold_after REAL NOT NULL,
+      medium_threshold_before REAL NOT NULL,
+      medium_threshold_after REAL NOT NULL,
+      change_source TEXT NOT NULL DEFAULT 'api'
     );
     `.trim(),
   ];
