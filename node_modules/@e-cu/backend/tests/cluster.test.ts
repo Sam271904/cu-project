@@ -7,6 +7,7 @@ import {
   canonicalSignatureForItem,
   clusterId,
   clusterKindFromDeltas,
+  clusterKindFromSignals,
   clusterNormalizedItemsForRound,
   isoWeekBucket,
 } from '../src/services/cluster/clusterNormalizedItemsForRound';
@@ -110,6 +111,21 @@ describe('cluster service (deterministic)', () => {
     expect(clusterKindFromDeltas({ conflict_delta: 0.5 })).toBe('event_update');
     expect(clusterKindFromDeltas({ conclusion_delta: 0.59, conflict_delta: 0.49 })).toBe('topic_drift');
     expect(clusterKindFromDeltas({})).toBe('topic_drift');
+  });
+
+  it('clusterKindFromSignals includes evidence_changed (design)', () => {
+    expect(
+      clusterKindFromSignals({ evidence_changed: true, conclusion_delta: 0, conflict_delta: 0 }),
+    ).toBe('event_update');
+    expect(
+      clusterKindFromSignals({ evidence_changed: false, conclusion_delta: 0.6, conflict_delta: 0 }),
+    ).toBe('event_update');
+    expect(
+      clusterKindFromSignals({ evidence_changed: false, conclusion_delta: 0, conflict_delta: 0.5 }),
+    ).toBe('event_update');
+    expect(
+      clusterKindFromSignals({ evidence_changed: false, conclusion_delta: 0.1, conflict_delta: 0.1 }),
+    ).toBe('topic_drift');
   });
 
   it('representative freeze: second clusterNormalizedItemsForRound call should not change representative_cluster_id/canonical_signature', async () => {

@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import webPush from 'web-push';
+import { maybeDecryptSubscriptionJson } from '../push/subscriptionCrypto';
 
 export type PushDispatchMode = 'simulate' | 'real';
 
@@ -144,7 +145,15 @@ export async function dispatchQueuedNotifications(
     for (const subRow of subscriptionRows) {
       let sub: any = null;
       try {
-        sub = JSON.parse(subRow.subscription_json);
+        const plain = maybeDecryptSubscriptionJson(
+          subRow.subscription_json,
+          process.env.PIH_PUSH_SUBSCRIPTION_SECRET ?? null,
+        );
+        if (!plain) {
+          sub = null;
+        } else {
+          sub = JSON.parse(plain);
+        }
       } catch {
         sub = null;
       }

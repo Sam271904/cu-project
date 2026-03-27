@@ -159,7 +159,7 @@ export function usePush(deps: UsePushDeps) {
       const appServerKey = urlBase64ToUint8Array(vapidJson.publicKey);
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: appServerKey,
+        applicationServerKey: appServerKey as unknown as BufferSource,
       });
       const subJson = sub.toJSON?.() ?? { endpoint: sub.endpoint, keys: (sub as { keys?: { p256dh: string; auth: string } }).keys };
       const r = await fetch('/api/push/subscribe', {

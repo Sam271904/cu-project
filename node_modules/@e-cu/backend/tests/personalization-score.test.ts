@@ -57,8 +57,8 @@ describe('scoreClusterForPersonalization', () => {
       { cluster_id: 'c1', content_summary: 'x', snippet_text: '', tags: [] },
       profile,
     );
-    expect(r.reasons).toContain('feedback:like');
-    expect(r.reasons).toContain('saved');
+    expect(r.reasons.some((x) => x.startsWith('feedback:like'))).toBe(true);
+    expect(r.reasons.some((x) => x.startsWith('feedback:saved'))).toBe(true);
   });
 });
 

@@ -1,12 +1,13 @@
-import crypto from 'node:crypto';
+import { computeSignalFingerprintFromSignalsJson } from './decisionSignalsFingerprint';
+import type { ReminderLevel } from './reminderScoring';
+
+export type { ReminderLevel } from './reminderScoring';
 
 export function truncateWithEllipsis(input: string, maxChars: number): string {
   if (input.length <= maxChars) return input;
   if (maxChars <= 3) return input.slice(0, maxChars);
   return input.slice(0, maxChars - 3) + '...';
 }
-
-export type ReminderLevel = 'high' | 'medium';
 
 export function buildPushPayload(opts: {
   event_key: string;
@@ -25,10 +26,7 @@ export function buildPushPayload(opts: {
   };
 }
 
-export function signalFingerprintFromSignalsJson(signals_json: string, signal_schema_version: string): string {
-  // Deterministic fingerprint; in v1 this replaces the full evidence_ref_ids derivation
-  // (until we fully materialize evidence_ref_ids in extraction).
-  const input = `${signal_schema_version}|${signals_json}`;
-  return crypto.createHash('sha256').update(input).digest('hex');
+/** @deprecated second arg ignored; use computeSignalFingerprintFromSignalsJson from decisionSignalsFingerprint */
+export function signalFingerprintFromSignalsJson(signals_json: string, _signal_schema_version: string): string {
+  return computeSignalFingerprintFromSignalsJson(signals_json);
 }
-
