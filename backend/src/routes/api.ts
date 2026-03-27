@@ -24,6 +24,7 @@ import {
 } from '../services/bookmarks/bookmarkIds';
 import { loadPersonalizationProfile } from '../services/personalization/loadProfile';
 import { scoreClusterForPersonalization } from '../services/personalization/scoreCluster';
+import { loadHnSignalForCluster } from '../services/personalization/loadHnSignalForCluster';
 import { loadAppConfig } from '../config';
 import { getPublicRuntimeConfigBody } from '../publicConfig';
 import { persistPipelineRoundMetrics } from '../services/metrics/persistPipelineRoundMetrics';
@@ -900,6 +901,7 @@ export function createApiHandler(db: Database.Database) {
             delta: number;
           }
         | undefined;
+      const hnSignal = loadHnSignalForCluster(db, cluster_id);
       if (scoreInput) {
         let tags: string[] = [];
         try {
@@ -914,6 +916,7 @@ export function createApiHandler(db: Database.Database) {
             content_summary: scoreInput.content_summary,
             snippet_text: scoreInput.snippet_text,
             tags,
+            hn_signal: hnSignal,
           },
           profileBefore,
         ).score;
@@ -923,6 +926,7 @@ export function createApiHandler(db: Database.Database) {
             content_summary: scoreInput.content_summary,
             snippet_text: scoreInput.snippet_text,
             tags,
+            hn_signal: hnSignal,
           },
           profileAfter,
         ).score;
@@ -1040,12 +1044,14 @@ export function createApiHandler(db: Database.Database) {
       });
 
       const cardsScored = cardsRaw.map((c) => {
+        const hnSignal = loadHnSignalForCluster(db, c.cluster_id);
         const sc = scoreClusterForPersonalization(
           {
             cluster_id: c.cluster_id,
             content_summary: String(c.content_summary ?? ''),
             snippet_text: `${String(c.content_text_or_excerpt ?? '')}\n${String(c.change_summary ?? '')}`,
             tags: c._tags,
+            hn_signal: hnSignal,
           },
           profile,
         );
@@ -1175,12 +1181,14 @@ export function createApiHandler(db: Database.Database) {
       }
 
       const scored = parsedRows.map((r) => {
+        const hnSignal = loadHnSignalForCluster(db, r.cluster_id);
         const sc = scoreClusterForPersonalization(
           {
             cluster_id: r.cluster_id,
             content_summary: r.content_summary,
             snippet_text: r.snippet_text,
             tags: r.tags,
+            hn_signal: hnSignal,
           },
           profile,
         );

@@ -48,6 +48,9 @@ export type AppConfig = {
   claimEmbeddingEnabled: boolean;
   /** Default `text-embedding-3-small` */
   embeddingModel: string;
+  hnEnabled: boolean;
+  hnFetchLimit: number;
+  hnStoryTypes: Array<'top' | 'new' | 'best'>;
 };
 
 function parsePort(raw: string | undefined, fallback: number): number {
@@ -134,6 +137,11 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ? embeddingModelRaw.trim()
       : 'text-embedding-3-small';
 
+  const hnEnabled = String(env.PIH_HN_ENABLED ?? 'true').toLowerCase() !== 'false';
+  const hnFetchLimit = Math.min(100, Math.max(1, Number(env.PIH_HN_FETCH_LIMIT ?? '30') as number));
+  const rawHnTypes = String(env.PIH_HN_STORY_TYPES ?? 'top,new');
+  const hnStoryTypes = rawHnTypes.split(',').map(s => s.trim()).filter(s => ['top','new','best'].includes(s)) as Array<'top'|'new'|'best'>;
+
   return {
     port: parsePort(env.PORT, 3001),
     databaseUrl: env.DATABASE_URL,
@@ -150,5 +158,8 @@ export function loadAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     reminderMediumThreshold: th.mediumMin,
     claimEmbeddingEnabled,
     embeddingModel,
+    hnEnabled,
+    hnFetchLimit,
+    hnStoryTypes,
   };
 }
