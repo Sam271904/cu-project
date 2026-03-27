@@ -1,13 +1,13 @@
 import type { PersonalizationProfile, PersonalizationScore } from './types';
 
-function velocityScore(velocity: number): number {
+export function velocityScore(velocity: number): number {
   // sigmoid(velocity / 10) → [0, 1]
   return 1 / (1 + Math.exp(-velocity / 10));
 }
 
-function positionScore(position: number): number {
+export function positionScore(position: number): number {
   // position 1 → 1.0, position 100 → 0, clamped
-  return Math.max(0, Math.min(1, 1 - position / 100));
+  return Math.max(0, Math.min(1, 1 - (position - 1) / 99));
 }
 
 export function computeHnSignal(velocity: number | null, position: number): number | null {
