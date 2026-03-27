@@ -313,7 +313,7 @@ export function createApiHandler(db: Database.Database) {
       const body = (await readJsonBody(req)) as any;
       const uiLang = normalizeLang(body?.lang);
       const useStoredFeeds = body?.useStoredFeeds === true;
-      const sourceTypes: string[] = Array.isArray(body?.source_types) ? body.source_types : ['rss', 'social', 'hn', 'bookmark'];
+      let sourceTypes: string[] = Array.isArray(body?.source_types) ? body.source_types : [];
 
       let socialRssFeeds: Array<{ feedUrl: string; sourceId?: string; sourceName?: string }> = Array.isArray(
         body?.socialRssFeeds,
@@ -334,6 +334,14 @@ export function createApiHandler(db: Database.Database) {
           jsonResponse(res, 400, { success: false, error: 'no_feeds_configured' });
           return;
         }
+        // Derive sourceTypes from the stored feeds that were loaded
+        sourceTypes = ['rss', 'hn', 'bookmark'];
+        if (socialRssFeeds.length > 0) sourceTypes.push('social');
+        if (techRssFeeds.length > 0) sourceTypes.push('tech');
+      } else if (sourceTypes.length === 0) {
+        sourceTypes = ['rss', 'hn', 'bookmark'];
+        if (socialRssFeeds.length > 0) sourceTypes.push('social');
+        if (techRssFeeds.length > 0) sourceTypes.push('tech');
       }
 
       const info = db
