@@ -312,6 +312,7 @@ export function createApiHandler(db: Database.Database) {
       const body = (await readJsonBody(req)) as any;
       const uiLang = normalizeLang(body?.lang);
       const useStoredFeeds = body?.useStoredFeeds === true;
+      const sourceTypes: string[] = Array.isArray(body?.source_types) ? body.source_types : ['rss', 'social', 'hn', 'bookmark'];
 
       let socialRssFeeds: Array<{ feedUrl: string; sourceId?: string; sourceName?: string }> = Array.isArray(
         body?.socialRssFeeds,
@@ -422,11 +423,80 @@ export function createApiHandler(db: Database.Database) {
         return inserted;
       }
 
-      if (socialRssFeeds.length > 0) {
+      if (sourceTypes.includes('social') && socialRssFeeds.length > 0) {
         socialCount = await ingestRssFeeds({ feeds: socialRssFeeds, sourceType: 'social' });
       }
-      if (techRssFeeds.length > 0) {
+      if (sourceTypes.includes('tech') && techRssFeeds.length > 0) {
         techCount = await ingestRssFeeds({ feeds: techRssFeeds, sourceType: 'tech' });
+      }
+
+      let hnCount = 0;
+      if (sourceTypes.includes('hn')) {
+        const { fetchHnStories, loadHnAdapterConfig } = await import('../adapters/hackernews');
+        const hnCfg = loadHnAdapterConfig(process.env);
+
+        // Load previous positions from hn_position_tracking (most recent round per hn_id)
+        const prevRows = db.prepare(`
+          SELECT hn_id, position
+          FROM hn_position_tracking
+          WHERE collection_round_id = (
+            SELECT MAX(collection_round_id) FROM hn_position_tracking
+          )
+        `).all() as Array<{ hn_id: number; position: number }>;
+        const prevPositions = new Map<number, number>();
+        for (const r of prevRows) prevPositions.set(r.hn_id, r.position);
+
+        const hnResult = await fetchHnStories(hnCfg, prevPositions, nowUtcIso);
+
+        if (hnResult.ok) {
+          // Insert HN stories into raw_items
+          const hnStmt = db.prepare(`
+            INSERT INTO raw_items
+              (collection_round_id, source_type, source_id, source_name, external_id, title, published_at, collected_at, url, excerpt_or_summary, author, language, timestamp_quality, source_metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          for (const story of hnResult.stories) {
+            const sourceId = `hn_${story.story_type}`;
+            hnStmt.run(
+              roundId,
+              'hn',
+              sourceId,
+              `Hacker News ${story.story_type}`,
+              `hn_${story.hn_id}`,
+              story.title,
+              nowUtcIso,
+              nowUtcIso,
+              story.url,
+              null,
+              story.author,
+              'en',
+              'missing',
+              JSON.stringify({
+                hn_id: story.hn_id,
+                hn_url: story.hn_url,
+                position: story.position,
+                prev_position: story.prev_position,
+                velocity: story.velocity,
+                score: story.score,
+                comment_count: story.comment_count,
+                author: story.author,
+                story_type: story.story_type,
+                fetched_at: story.fetched_at,
+              }),
+            );
+            hnCount++;
+          }
+
+          // Write position tracking
+          const trackStmt = db.prepare(`
+            INSERT OR REPLACE INTO hn_position_tracking (hn_id, collection_round_id, position, velocity, fetched_at)
+            VALUES (?, ?, ?, ?, ?)
+          `);
+          for (const story of hnResult.stories) {
+            trackStmt.run(story.hn_id, roundId, story.position, story.velocity ?? 0, nowUtcIso);
+          }
+        }
       }
 
       const notifications = await runIngestionPipeline(db, roundId, nowUtcIso, uiLang);
@@ -435,7 +505,7 @@ export function createApiHandler(db: Database.Database) {
       jsonResponse(res, 200, {
         success: true,
         round_id: roundId,
-        ingested: { social: socialCount, tech: techCount },
+        ingested: { social: socialCount, tech: techCount, hn: hnCount },
         rss_feed_failures: rssFeedFailures,
         rss_feed_errors: rssFeedErrors,
         notifications,
