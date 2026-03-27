@@ -6,11 +6,11 @@
 
 ## Summary
 
-Add a first-class Hacker News (HN) adapter using the HN Algolia API to track real-time ranking position and velocity as personalization signals. HN data influences homepage ranking but does not trigger standalone push notifications.
+Add a first-class Hacker News (HN) adapter using the **HN Firebase API** (`hacker-news.firebaseio.com`) to track real-time ranking position and velocity as personalization signals. HN data influences homepage ranking but does not trigger standalone push notifications.
 
 ## Motivation
 
-The current HN integration uses RSS (via `hnrss.org`), which only tells us "this story exists." The HN Algolia API reveals **how a story is trending** — its position in Top/New/Best lists and how fast it's moving. Position velocity is a strong signal for content importance that the RSS adapter cannot provide.
+The current HN integration uses RSS (via `hnrss.org`), which only tells us "this story exists." The HN Firebase API reveals **how a story is trending** — its position in Top/New/Best lists and how fast it's moving. Position velocity is a strong signal for content importance that the RSS adapter cannot provide.
 
 **Goals:**
 - Track HN story position and velocity as scoring signals
@@ -25,7 +25,7 @@ The current HN integration uses RSS (via `hnrss.org`), which only tells us "this
 ## Architecture
 
 ```
-HN Algolia API (hacker-news.firebaseio.com)
+HN Firebase API (hacker-news.firebaseio.com)
          ↓
   HN Adapter (backend/src/adapters/hackernews/)
          ↓
@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS hn_position_tracking (
 
 Purpose: Long-running velocity analysis across collection rounds, not required for MVP scoring but enables future trend analysis.
 
+**Note:** `collection_round_id` references `collection_rounds.id` (defined in `backend/src/db/schema.ts`). HN position tracking entries are written each round alongside the main `raw_items` ingest.
+
 ## Adapter Interface
 
 ### File: `backend/src/adapters/hackernews/fetchHnStories.ts`
@@ -121,6 +123,7 @@ GET https://hacker-news.firebaseio.com/v0/item/{id}.json
 |----------|----------|
 | HN API rate limit | Cache last successful response 15min, return cache |
 | HN API unreachable | Log `source_metadata.fetch_error=network`, skip HN in this round |
+| Per-list failure (e.g., `topstories` fails but `newstories` succeeds) | Continue with successful lists; failed lists skipped for that round only |
 | Individual story fetch fails | Skip that story, continue with others |
 | Invalid story data | Log and skip, do not block other stories |
 
@@ -143,7 +146,9 @@ const final_score = cluster_base_score * (1 - HN_WEIGHT) + hn_signal * HN_WEIGHT
 
 ### Integration point
 
-`backend/src/services/personalization/scoreCluster.ts` reads `raw_items.source_metadata_json` for `source_type='hn'`, computes `hn_signal`, and blends with existing keyword/persona/feedback scores.
+`backend/src/services/personalization/scoreCluster.ts` reads `raw_items.source_metadata_json` for `source_type='hn'`, computes `hn_signal`, and blends with existing keyword/persona/feedback scores **at the final ranking stage** — **not** into `evidence_novelty`, `conclusion_delta`, or `conflict_delta`. HN velocity is an orthogonal relevance signal (how much the HN community cares), separate from the event-change signals computed by the notification policy.
+
+The sigmoid divisor of `10` means a story rising ~10 positions per round is considered "significant velocity" (sigmoid(1) ≈ 0.73). This is tuned to filter out normal榜单 fluctuation while catching genuine viral moments.
 
 ### Notification impact
 
@@ -201,9 +206,9 @@ PIH_HN_FALLBACK_RSS=true      # Use hnrss.org RSS if API fails (default: true)
 
 | File | Action |
 |------|--------|
-| `backend/src/adapters/hackernews/fetchHnStories.ts` | Create |
-| `backend/src/adapters/hackernews/types.ts` | Create |
-| `backend/src/adapters/hackernews/index.ts` | Create (exports) |
+| `backend/src/adapters/hackernews/types.ts` | Create (`HnStory` interface, `HnAdapter` interface) |
+| `backend/src/adapters/hackernews/fetchHnStories.ts` | Create (`fetchHnStories` implementation) |
+| `backend/src/adapters/hackernews/index.ts` | Create (re-exports from `types.ts` + `fetchHnStories.ts`) |
 | `backend/src/adapters/index.ts` | Modify (export HN adapter) |
 | `backend/src/services/personalization/scoreCluster.ts` | Modify (HN signal integration) |
 | `backend/src/routes/api.ts` | Modify (source_types includes 'hn') |
@@ -215,7 +220,7 @@ PIH_HN_FALLBACK_RSS=true      # Use hnrss.org RSS if API fails (default: true)
 ## Milestone
 
 This is **D1** of v2 (D → B → A sequence). Completion criteria:
-- [ ] HN adapter fetches Top/New/Best stories via Algolia API
+- [ ] HN adapter fetches Top/New/Best stories via Firebase API
 - [ ] Position and velocity stored in `raw_items.source_metadata_json`
 - [ ] `hn_position_tracking` table created and populated each round
 - [ ] Velocity signal influences personalization score
