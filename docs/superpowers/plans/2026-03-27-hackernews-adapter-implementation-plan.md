@@ -27,10 +27,9 @@
 | File | Change |
 |------|--------|
 | `backend/src/db/schema.ts` | Add `source_metadata_json TEXT` to `raw_items`; add `hn_position_tracking` table |
-| `backend/src/db/db.ts` | Add `source_metadata_json` to `raw_items` insert |
-| `backend/src/adapters/index.ts` | Export HN adapter |
-| `backend/src/routes/api.ts` | Add `source_types: ['hn']` support in `POST /api/collect` |
+| `backend/src/routes/api.ts` | Add `source_types: ['hn']` support in `POST /api/collect`; update raw_items INSERT to include `source_metadata_json`; integrate HN signal at scoring call sites |
 | `backend/src/services/personalization/scoreCluster.ts` | Blend HN velocity signal into final score |
+| `backend/src/services/personalization/loadHnSignalForCluster.ts` | NEW: Look up HN signal per cluster from raw_items |
 | `backend/src/services/personalization/types.ts` | Add `hn_signal?: number` to `PersonalizationScore` |
 | `backend/src/config.ts` | Add `PIH_HN_*` env vars |
 
@@ -40,7 +39,7 @@
 
 **Files:**
 - Modify: `backend/src/db/schema.ts`
-- Modify: `backend/src/db/db.ts`
+- Modify: `backend/src/routes/api.ts` (raw_items INSERT)
 
 - [ ] **Step 1: Add `source_metadata_json` column to `raw_items` in schema**
 
@@ -84,20 +83,10 @@ CREATE TABLE IF NOT EXISTS hn_position_tracking (
 );
 ```
 
-- [ ] **Step 3: Update `raw_items` INSERT in `db.ts`**
-
-Read `backend/src/db/db.ts`. Find the `raw_items` insert statements and add `source_metadata_json` as the 14th column + `?` value. The insert signature changes from 13 to 14 columns.
-
-```typescript
-// In the INSERT statement for raw_items, add:
-// source_metadata_json TEXT
-// Values: ..., source_metadata_json: item.source_metadata_json ?? null
-```
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add backend/src/db/schema.ts backend/src/db/db.ts
+git add backend/src/db/schema.ts
 git commit -m "feat(db): add source_metadata_json to raw_items and hn_position_tracking table"
 ```
 
@@ -289,8 +278,8 @@ export function loadHnAdapterConfig(env: NodeJS.ProcessEnv): HnAdapterConfig {
 Create `backend/src/adapters/hackernews/index.ts`:
 
 ```typescript
-export { fetchHnStories, loadHnAdapterConfig, type HnStory, type HnStoryType, type HnAdapterConfig, type FetchHnResult } from './fetchHnStories';
-export { type HnAdapterConfig } from './types';
+export { fetchHnStories, loadHnAdapterConfig, type HnStory, type HnStoryType, type FetchHnResult } from './fetchHnStories';
+export type { HnAdapterConfig } from './types';
 ```
 
 - [ ] **Step 4: Commit**
@@ -306,17 +295,8 @@ git commit -m "feat(hn): initial HackerNews Firebase API adapter"
 
 **Files:**
 - Modify: `backend/src/routes/api.ts`
-- Modify: `backend/src/adapters/index.ts`
 
-- [ ] **Step 1: Export HN adapter from `adapters/index.ts`**
-
-Add to `backend/src/adapters/index.ts`:
-
-```typescript
-export { fetchHnStories, loadHnAdapterConfig, type HnAdapterConfig } from './hackernews';
-```
-
-- [ ] **Step 2: Modify `POST /api/collect` to support `source_types: ['hn']`**
+- [ ] **Step 1: Modify `POST /api/collect` to support `source_types: ['hn']`**
 
 In `backend/src/routes/api.ts`:
 
@@ -349,10 +329,14 @@ if (sourceTypes.includes('hn')) {
   const { fetchHnStories, loadHnAdapterConfig } = await import('../adapters/hackernews');
   const hnCfg = loadHnAdapterConfig(process.env);
 
-  // Load previous positions from hn_position_tracking
-  const prevRows = db.prepare(
-    'SELECT hn_id, position FROM hn_position_tracking WHERE collection_round_id = ?'
-  ).all() as Array<{ hn_id: number; position: number }>;
+  // Load previous positions from hn_position_tracking (most recent round per hn_id)
+  const prevRows = db.prepare(`
+    SELECT hn_id, position
+    FROM hn_position_tracking
+    WHERE collection_round_id = (
+      SELECT MAX(collection_round_id) FROM hn_position_tracking
+    )
+  `).all() as Array<{ hn_id: number; position: number }>;
   const prevPositions = new Map<number, number>();
   for (const r of prevRows) prevPositions.set(r.hn_id, r.position);
 
@@ -426,7 +410,7 @@ jsonResponse(res, 200, {
 - [ ] **Step 3: Commit**
 
 ```bash
-git add backend/src/routes/api.ts backend/src/adapters/index.ts
+git add backend/src/routes/api.ts
 git commit -m "feat(api): add HN adapter to /api/collect with source_types"
 ```
 
@@ -438,6 +422,13 @@ git commit -m "feat(api): add HN adapter to /api/collect with source_types"
 - Modify: `backend/src/services/personalization/scoreCluster.ts`
 - Modify: `backend/src/services/personalization/types.ts`
 - Modify: `backend/src/config.ts`
+- Modify: `backend/src/routes/api.ts` (call sites)
+
+### Key Integration Point
+
+The `hn_signal` must be computed **per cluster** by querying `raw_items.source_metadata_json` for HN items in that cluster. A helper function does this lookup. Each call site (`/api/homepage`, `/api/knowledge/search`, `/api/personalization/feedback`) passes the per-cluster `hn_signal` to `scoreClusterForPersonalization`.
+
+The join path is: `cluster_id → cluster_evidence → normalized_items → raw_items (source_type='hn')`
 
 - [ ] **Step 1: Add `hn_signal` to `PersonalizationScore`**
 
@@ -453,20 +444,14 @@ export type PersonalizationScore = {
 };
 ```
 
-- [ ] **Step 2: Add HN signal computation to `scoreClusterForPersonalization`**
+- [ ] **Step 2: Add HN signal helpers to `scoreCluster.ts`**
 
-Read `backend/src/services/personalization/loadProfile.ts` to understand the full `scoreClusterForPersonalization` call chain. The function takes `cluster_id` but needs access to `raw_items.source_metadata_json`. The scoring function needs a new parameter.
-
-In `scoreCluster.ts`, add a helper and update the function signature:
+Add these pure functions to `backend/src/services/personalization/scoreCluster.ts`:
 
 ```typescript
-/**
- * sigmoid(x / scale) → [0, 1]
- * velocity of 10 positions/round ≈ "significant" → sigmoid(1) ≈ 0.73
- */
 function velocityScore(velocity: number): number {
-  const s = 1 / (1 + Math.exp(-velocity / 10));
-  return s;
+  // sigmoid(velocity / 10) → [0, 1]
+  return 1 / (1 + Math.exp(-velocity / 10));
 }
 
 function positionScore(position: number): number {
@@ -475,11 +460,18 @@ function positionScore(position: number): number {
 }
 
 export function computeHnSignal(velocity: number | null, position: number): number | null {
-  const vScore = velocity !== null ? velocityScore(velocity) : 0.5; // 0.5 = "unknown"
+  if (velocity === null && position > 100) return null; // no signal if not in top 100
+  const vScore = velocity !== null ? velocityScore(velocity) : 0.5;
   const pScore = positionScore(position);
   return vScore * 0.6 + pScore * 0.4;
 }
+```
 
+- [ ] **Step 3: Update `scoreClusterForPersonalization` signature and blending**
+
+In `backend/src/services/personalization/scoreCluster.ts`, update the function:
+
+```typescript
 export function scoreClusterForPersonalization(
   input: {
     cluster_id: string;
@@ -487,20 +479,16 @@ export function scoreClusterForPersonalization(
     snippet_text: string;
     tags: string[];
     extra_text?: string;
-    hn_signal?: number | null; // NEW
+    /** HN signal [0, 1] from computeHnSignal, or null/undefined if no HN data */
+    hn_signal?: number | null;
   },
   profile: PersonalizationProfile,
 ): PersonalizationScore {
-  // ... existing deny/allow/persona/feedback logic unchanged ...
+  // ... existing deny/allow/persona/feedback logic produces base score ...
 
-  let score = 0;
-  const reasons: string[] = [];
-
-  // ... existing scoring logic (deny, allow, persona, feedback) ...
-
-  // Blend HN signal at the end
-  let hn_signal: number | null = null;
+  // Blend HN signal at the end (HN_WEIGHT = 15% of final score)
   const HN_WEIGHT = 0.15;
+  let hn_signal: number | null = null;
   if (input.hn_signal != null) {
     hn_signal = input.hn_signal;
     score = score * (1 - HN_WEIGHT) + hn_signal * HN_WEIGHT;
@@ -511,7 +499,92 @@ export function scoreClusterForPersonalization(
 }
 ```
 
-- [ ] **Step 3: Add `PIH_HN_*` config to `config.ts`**
+**Note:** The existing `// ... existing deny/allow/persona/feedback logic ...` placeholder must be replaced with the exact existing function body (lines 26-77 of `scoreCluster.ts`). Do NOT rewrite — just insert `hn_signal` handling after the existing return.
+
+- [ ] **Step 4: Add `loadHnSignalForCluster` utility**
+
+Create a new file `backend/src/services/personalization/loadHnSignalForCluster.ts`:
+
+```typescript
+import type Database from 'better-sqlite3';
+import { computeHnSignal } from './scoreCluster';
+
+/**
+ * Looks up the best HN signal for a cluster by joining
+ * cluster_evidence → normalized_items → raw_items (source_type='hn')
+ * and taking the max hn_signal across all HN items in the cluster.
+ * Returns null if no HN items are in this cluster.
+ */
+export function loadHnSignalForCluster(
+  db: Database.Database,
+  clusterId: string,
+): number | null {
+  const rows = db.prepare(`
+    SELECT r.source_metadata_json
+    FROM cluster_evidence ce
+    JOIN normalized_items ni ON ni.id = ce.normalized_item_id
+    JOIN raw_items r ON r.id = ni.raw_item_id
+    WHERE ce.cluster_id = ? AND r.source_type = 'hn'
+  `).all(clusterId) as Array<{ source_metadata_json: string }>;
+
+  if (rows.length === 0) return null;
+
+  let bestSignal: number | null = null;
+  for (const row of rows) {
+    let meta: Record<string, unknown>;
+    try {
+      meta = JSON.parse(row.source_metadata_json ?? '{}');
+    } catch {
+      continue;
+    }
+    const position = typeof meta.position === 'number' ? meta.position : 100;
+    const velocity = typeof meta.velocity === 'number' ? meta.velocity : null;
+    const sig = computeHnSignal(velocity, position);
+    if (sig !== null && (bestSignal === null || sig > bestSignal)) {
+      bestSignal = sig;
+    }
+  }
+  return bestSignal;
+}
+```
+
+- [ ] **Step 5: Integrate at each call site in `api.ts`**
+
+**For `/api/homepage` (around line 970):**
+```typescript
+// Before calling scoreClusterForPersonalization, load HN signal:
+const hnSignal = loadHnSignalForCluster(db, c.cluster_id);
+const sc = scoreClusterForPersonalization(
+  {
+    cluster_id: c.cluster_id,
+    content_summary: String(c.content_summary ?? ''),
+    snippet_text: `${String(c.content_text_or_excerpt ?? '')}\n${String(c.change_summary ?? '')}`,
+    tags: c._tags,
+    hn_signal: hnSignal,
+  },
+  profile,
+);
+```
+
+**For `/api/knowledge/search` (around line 1105):**
+```typescript
+const hnSignal = loadHnSignalForCluster(db, r.cluster_id);
+const sc = scoreClusterForPersonalization(
+  {
+    cluster_id: r.cluster_id,
+    content_summary: String(r.content_summary ?? ''),
+    snippet_text: String(r.snippet_text ?? ''),
+    tags: tags,
+    hn_signal: hnSignal,
+  },
+  profile,
+);
+```
+
+**For `/api/personalization/feedback` (lines 838 and 847):**
+Apply `hnSignal` to both `before` and `after` scoring calls using the same `loadHnSignalForCluster(db, cluster_id)` call before the two `scoreClusterForPersonalization` invocations.
+
+- [ ] **Step 6: Add `PIH_HN_*` config to `config.ts`**
 
 In `backend/src/config.ts`, add to `AppConfig`:
 
@@ -538,10 +611,10 @@ hnFetchLimit,
 hnStoryTypes,
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add backend/src/services/personalization/scoreCluster.ts backend/src/services/personalization/types.ts backend/src/config.ts
+git add backend/src/services/personalization/scoreCluster.ts backend/src/services/personalization/types.ts backend/src/services/personalization/loadHnSignalForCluster.ts backend/src/config.ts backend/src/routes/api.ts
 git commit -m "feat(personalization): blend HN velocity signal into cluster scoring"
 ```
 
