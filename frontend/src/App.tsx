@@ -58,11 +58,6 @@ export function App() {
     decision_signals: number;
     knowledge_entries: number;
     cluster_kind_summary: Record<string, number>;
-    notification_policy?: {
-      weights: { w1: number; w2: number; w3: number };
-      high_threshold: number;
-      medium_threshold: number;
-    };
     privacy_checks?: {
       pass: boolean;
       details: {
@@ -74,23 +69,15 @@ export function App() {
     };
   };
 
-  function loadStoredView(): 'search' | 'homepage' | 'sources' | 'personalize' | 'push' {
+  function loadStoredView(): 'search' | 'homepage' | 'sources' | 'personalize' {
     try {
       const v = localStorage.getItem('pih.view');
       if (v === 'homepage') return 'homepage';
       if (v === 'sources') return 'sources';
       if (v === 'personalize') return 'personalize';
-      if (v === 'push') return 'push';
       return 'search';
     } catch {
       return 'search';
-    }
-  }
-  function loadStoredPushApiToken(): string {
-    try {
-      return localStorage.getItem('pih.push.apiToken') ?? '';
-    } catch {
-      return '';
     }
   }
   function loadStoredLevel(
@@ -130,9 +117,7 @@ export function App() {
     }
   }
 
-  const [view, setView] = React.useState<'search' | 'homepage' | 'sources' | 'personalize' | 'push'>(() =>
-    loadStoredView(),
-  );
+  const [view, setView] = React.useState<'search' | 'homepage' | 'sources' | 'personalize'>(() => loadStoredView());
   type FeedRow = {
     id: number;
     source_type: string;
@@ -161,25 +146,6 @@ export function App() {
   const [persLoading, setPersLoading] = React.useState(false);
   const [persError, setPersError] = React.useState<string | null>(null);
   const [persOk, setPersOk] = React.useState<string | null>(null);
-  const [pushApiToken, setPushApiToken] = React.useState(() => loadStoredPushApiToken());
-  const [pushInfoLoading, setPushInfoLoading] = React.useState(false);
-  const [pushActionLoading, setPushActionLoading] = React.useState(false);
-  const [pushError, setPushError] = React.useState<string | null>(null);
-  const [pushInfo, setPushInfo] = React.useState<string | null>(null);
-  type PushConsentPayload = {
-    has_subscription: boolean;
-    push_permission_status: string;
-    consent_timestamp: string | null;
-    last_subscription_at_utc: string | null;
-  };
-  const [pushConsent, setPushConsent] = React.useState<PushConsentPayload | null>(null);
-  const [pushStatus, setPushStatus] = React.useState<{
-    subscription_count: number;
-    vapid_configured: boolean;
-  } | null>(null);
-  const [browserNotifPermission, setBrowserNotifPermission] = React.useState<string>(() =>
-    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
-  );
   const [lang, setLang] = React.useState<UiLang>(() => loadStoredLang());
   const [dataLang, setDataLang] = React.useState<UiLang | null>(() => loadStoredDataLang());
   const [q, setQ] = React.useState(() => loadStoredSearchQuery());
@@ -218,7 +184,6 @@ export function App() {
     homepageTab: lang === 'zh' ? '首页' : 'Homepage',
     sourcesTab: lang === 'zh' ? '信源' : 'Sources',
     personalizeTab: lang === 'zh' ? '个性化' : 'Personalize',
-    pushTab: lang === 'zh' ? '推送' : 'Push',
     persTitle: lang === 'zh' ? '个性化规则' : 'Personalization',
     persAllowLabel: lang === 'zh' ? '偏好关键词（命中加分，每行一条）' : 'Boost keywords (one per line)',
     persDenyLabel: lang === 'zh' ? '屏蔽关键词（命中则隐藏条目）' : 'Hide keywords (one per line)',
@@ -312,218 +277,7 @@ export function App() {
       lang === 'zh'
         ? '保存后首页与搜索会按分数重排；屏蔽词命中的条目将不再出现。'
         : 'After save, homepage and search reorder by score; denied keywords hide items.',
-    pushTitle: lang === 'zh' ? '浏览器推送（同意与订阅）' : 'Web Push (consent & subscribe)',
-    pushHint:
-      lang === 'zh'
-        ? '需 HTTPS 或 localhost；服务端需 PIH_PUSH_ENABLED=true 且配置 VAPID。若启用 PIH_PUSH_API_TOKEN，请在下方填写 Token（仅存于本机浏览器）。'
-        : 'Requires HTTPS or localhost; server needs PIH_PUSH_ENABLED=true and VAPID keys. If PIH_PUSH_API_TOKEN is set, paste the token below (stored locally only).',
-    pushTokenLabel: lang === 'zh' ? 'Push API Token（可选）' : 'Push API token (optional)',
-    pushTokenPlaceholder: lang === 'zh' ? '与后端 PIH_PUSH_API_TOKEN 一致时填写' : 'Match server PIH_PUSH_API_TOKEN when required',
-    pushRefresh: lang === 'zh' ? '刷新状态' : 'Refresh',
-    pushSubscribe: lang === 'zh' ? '请求通知权限并订阅' : 'Enable notifications & subscribe',
-    pushUnsubscribe: lang === 'zh' ? '取消订阅' : 'Unsubscribe',
-    pushNotSupported: lang === 'zh' ? '当前浏览器不支持 Service Worker / Push。' : 'Service Worker / Push not supported.',
-    pushDisabled503: lang === 'zh' ? '推送 API 未启用（503 push_disabled）。' : 'Push APIs disabled (503 push_disabled).',
-    pushUnauthorized: lang === 'zh' ? '401：缺少或错误的 Push API Token。' : '401: missing or invalid Push API token.',
-    pushVapidMissing: lang === 'zh' ? '服务端未配置 VAPID 公钥。' : 'VAPID public key missing on server.',
-    pushOkSubscribed: lang === 'zh' ? '已订阅并写入服务端。' : 'Subscribed and saved on server.',
-    pushOkUnsubscribed: lang === 'zh' ? '已取消订阅。' : 'Unsubscribed.',
-    pushPermBrowser: lang === 'zh' ? '浏览器通知权限' : 'Browser notification permission',
-    pushPermServer: lang === 'zh' ? '服务端记录' : 'Server record',
-    pushHasSub: lang === 'zh' ? '库中有订阅' : 'Has subscription row',
-    pushSubCount: lang === 'zh' ? '订阅行数' : 'Subscription rows',
-    pushVapidOk: lang === 'zh' ? 'VAPID 已配置' : 'VAPID configured',
-    pushVapidNo: lang === 'zh' ? 'VAPID 未配置' : 'VAPID not configured',
   };
-
-  function urlBase64ToUint8Array(base64String: string): Uint8Array {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-    return outputArray;
-  }
-
-  function pushAuthHeaders(): Record<string, string> {
-    const t = pushApiToken.trim();
-    if (!t) return {};
-    return { Authorization: `Bearer ${t}` };
-  }
-
-  async function loadPushInfo() {
-    setPushInfoLoading(true);
-    setPushError(null);
-    setPushInfo(null);
-    if (typeof Notification !== 'undefined') {
-      setBrowserNotifPermission(Notification.permission);
-    }
-    try {
-      const [cRes, sRes] = await Promise.all([fetch('/api/push/consent'), fetch('/api/push/status')]);
-      const cJson = (await cRes.json()) as { success?: boolean; error?: string } & Partial<PushConsentPayload>;
-      const sJson = (await sRes.json()) as {
-        success?: boolean;
-        subscription_count?: number;
-        vapid_configured?: boolean;
-        error?: string;
-      };
-      if (cRes.status === 503 || cJson?.error === 'push_disabled') {
-        setPushConsent(null);
-        setPushStatus(null);
-        setPushError(t.pushDisabled503);
-        return;
-      }
-      if (sRes.status === 503 || sJson?.error === 'push_disabled') {
-        setPushConsent(null);
-        setPushStatus(null);
-        setPushError(t.pushDisabled503);
-        return;
-      }
-      let errMsg: string | null = null;
-      if (!cRes.ok || !cJson?.success) {
-        errMsg = `consent_http_${cRes.status}`;
-        setPushConsent(null);
-      } else {
-        setPushConsent({
-          has_subscription: Boolean(cJson.has_subscription),
-          push_permission_status: String(cJson.push_permission_status ?? 'unknown'),
-          consent_timestamp: cJson.consent_timestamp ?? null,
-          last_subscription_at_utc: cJson.last_subscription_at_utc ?? null,
-        });
-      }
-      if (!sRes.ok || !sJson?.success) {
-        errMsg = errMsg ?? `status_http_${sRes.status}`;
-        setPushStatus(null);
-      } else {
-        setPushStatus({
-          subscription_count: Number(sJson.subscription_count ?? 0),
-          vapid_configured: Boolean(sJson.vapid_configured),
-        });
-      }
-      setPushError(errMsg);
-    } catch (e: unknown) {
-      setPushError(String((e as { message?: string })?.message ?? e));
-      setPushConsent(null);
-      setPushStatus(null);
-    } finally {
-      setPushInfoLoading(false);
-    }
-  }
-
-  async function subscribeToPush() {
-    setPushActionLoading(true);
-    setPushError(null);
-    setPushInfo(null);
-    try {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        setPushError(t.pushNotSupported);
-        return;
-      }
-      const vapidRes = await fetch('/api/push/vapid-public-key');
-      const vapidJson = (await vapidRes.json()) as { success?: boolean; publicKey?: string | null; error?: string };
-      if (vapidRes.status === 503 || vapidJson?.error === 'push_disabled') {
-        setPushError(t.pushDisabled503);
-        return;
-      }
-      if (!vapidRes.ok || !vapidJson?.success || !vapidJson.publicKey) {
-        setPushError(t.pushVapidMissing);
-        return;
-      }
-      const perm = await Notification.requestPermission();
-      setBrowserNotifPermission(perm);
-      if (perm !== 'granted') {
-        setPushError(lang === 'zh' ? `通知权限：${perm}` : `Notification permission: ${perm}`);
-        return;
-      }
-      const reg = await navigator.serviceWorker.register('/sw.js');
-      await reg.update();
-      const appServerKey = urlBase64ToUint8Array(vapidJson.publicKey);
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: appServerKey,
-      });
-      const subJson = sub.toJSON?.() ?? { endpoint: sub.endpoint, keys: (sub as { keys?: { p256dh: string; auth: string } }).keys };
-      const r = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          ...pushAuthHeaders(),
-        },
-        body: JSON.stringify({
-          subscription: subJson,
-          push_permission_status: perm,
-          consent_timestamp: new Date().toISOString(),
-        }),
-      });
-      const body = (await r.json()) as { success?: boolean; error?: string };
-      if (r.status === 401) {
-        setPushError(t.pushUnauthorized);
-        return;
-      }
-      if (r.status === 503 || body?.error === 'push_disabled') {
-        setPushError(t.pushDisabled503);
-        return;
-      }
-      if (!r.ok || !body?.success) {
-        setPushError(`subscribe_http_${r.status}`);
-        return;
-      }
-      setPushInfo(t.pushOkSubscribed);
-      await loadPushInfo();
-    } catch (e: unknown) {
-      setPushError(String((e as { message?: string })?.message ?? e));
-    } finally {
-      setPushActionLoading(false);
-    }
-  }
-
-  async function unsubscribeFromPush() {
-    setPushActionLoading(true);
-    setPushError(null);
-    setPushInfo(null);
-    try {
-      if (!('serviceWorker' in navigator)) {
-        setPushError(t.pushNotSupported);
-        return;
-      }
-      const reg = await navigator.serviceWorker.getRegistration();
-      const sub = reg ? await reg.pushManager.getSubscription() : null;
-      if (!sub) {
-        setPushError(lang === 'zh' ? '当前无浏览器推送订阅。' : 'No active push subscription in this browser.');
-        return;
-      }
-      const endpoint = sub.endpoint;
-      const r = await fetch('/api/push/unsubscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          ...pushAuthHeaders(),
-        },
-        body: JSON.stringify({ endpoint }),
-      });
-      const body = (await r.json()) as { success?: boolean };
-      if (r.status === 401) {
-        setPushError(t.pushUnauthorized);
-        return;
-      }
-      if (r.status === 503) {
-        setPushError(t.pushDisabled503);
-        return;
-      }
-      if (!r.ok || !body?.success) {
-        setPushError(`unsubscribe_http_${r.status}`);
-        return;
-      }
-      await sub.unsubscribe();
-      setBrowserNotifPermission(typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
-      setPushInfo(t.pushOkUnsubscribed);
-      await loadPushInfo();
-    } catch (e: unknown) {
-      setPushError(String((e as { message?: string })?.message ?? e));
-    } finally {
-      setPushActionLoading(false);
-    }
-  }
 
   async function search() {
     const query = q.trim();
@@ -1022,20 +776,6 @@ export function App() {
   }, [view]);
 
   React.useEffect(() => {
-    if (view === 'push') void loadPushInfo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh push/consent when tab opens
-  }, [view]);
-
-  React.useEffect(() => {
-    try {
-      if (pushApiToken.trim()) localStorage.setItem('pih.push.apiToken', pushApiToken.trim());
-      else localStorage.removeItem('pih.push.apiToken');
-    } catch {
-      // ignore
-    }
-  }, [pushApiToken]);
-
-  React.useEffect(() => {
     try {
       localStorage.setItem('pih.view', view);
     } catch {
@@ -1266,20 +1006,6 @@ export function App() {
           {t.personalizeTab}
         </button>
         <button
-          type="button"
-          data-testid="tab-push"
-          onClick={() => setView('push')}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 6,
-            border: '1px solid #ddd',
-            cursor: 'pointer',
-            background: view === 'push' ? '#eef6ff' : '#fff',
-          }}
-        >
-          {t.pushTab}
-        </button>
-        <button
           onClick={() => setLang('zh')}
           style={{
             padding: '8px 10px',
@@ -1387,17 +1113,6 @@ export function App() {
             {demoStatus.privacy_checks?.details
               ? `(${`signal_snippet_max=${demoStatus.privacy_checks.details.max_signal_snippet_length}, knowledge_snippet_max=${demoStatus.privacy_checks.details.max_knowledge_snippet_length}`})`
               : ''}
-            {demoStatus.notification_policy ? (
-              <>
-                {' · '}
-                reminder w1/w2/w3=
-                {demoStatus.notification_policy.weights.w1.toFixed(2)}/
-                {demoStatus.notification_policy.weights.w2.toFixed(2)}/
-                {demoStatus.notification_policy.weights.w3.toFixed(2)} · high≥
-                {demoStatus.notification_policy.high_threshold} · med≥
-                {demoStatus.notification_policy.medium_threshold}
-              </>
-            ) : null}
           </div>
         ) : (
           <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>{t.noStatus}</div>
@@ -1898,7 +1613,7 @@ export function App() {
             ))}
           </div>
         </>
-      ) : view === 'personalize' ? (
+      ) : (
         <>
           <div style={{ border: '1px solid #fce7f3', borderRadius: 10, padding: 12, marginBottom: 12, background: '#fffafb' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
@@ -1988,122 +1703,6 @@ export function App() {
             >
               {persLoading ? t.persSaving : t.persSave}
             </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div
-            style={{
-              border: '1px solid #dbeafe',
-              borderRadius: 10,
-              padding: 12,
-              marginBottom: 12,
-              background: '#f8fafc',
-            }}
-            data-testid="panel-push"
-          >
-            <h3 style={{ margin: '0 0 8px' }}>{t.pushTitle}</h3>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>{t.pushHint}</div>
-
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155' }}>{t.pushTokenLabel}</label>
-            <input
-              data-testid="input-push-token"
-              type="password"
-              autoComplete="off"
-              value={pushApiToken}
-              onChange={(e) => setPushApiToken(e.target.value)}
-              placeholder={t.pushTokenPlaceholder}
-              style={{
-                width: '100%',
-                maxWidth: 480,
-                boxSizing: 'border-box',
-                marginTop: 6,
-                marginBottom: 12,
-                padding: 8,
-                border: '1px solid #ddd',
-                borderRadius: 6,
-                fontFamily: 'ui-monospace, monospace',
-                fontSize: 12,
-              }}
-            />
-
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-              <button
-                type="button"
-                data-testid="btn-push-refresh"
-                disabled={pushInfoLoading || pushActionLoading}
-                onClick={() => void loadPushInfo()}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 6,
-                  border: '1px solid #ddd',
-                  cursor: pushInfoLoading ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {pushInfoLoading ? '...' : t.pushRefresh}
-              </button>
-              <button
-                type="button"
-                data-testid="btn-push-subscribe"
-                disabled={pushActionLoading || pushInfoLoading}
-                onClick={() => void subscribeToPush()}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 6,
-                  border: '1px solid #2563eb',
-                  background: '#eff6ff',
-                  cursor: pushActionLoading ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {pushActionLoading ? t.loading : t.pushSubscribe}
-              </button>
-              <button
-                type="button"
-                data-testid="btn-push-unsubscribe"
-                disabled={pushActionLoading || pushInfoLoading}
-                onClick={() => void unsubscribeFromPush()}
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: 6,
-                  border: '1px solid #cbd5e1',
-                  cursor: pushActionLoading ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {pushActionLoading ? t.loading : t.pushUnsubscribe}
-              </button>
-            </div>
-
-            {pushError ? (
-              <div style={{ color: '#b00020', marginBottom: 8 }} data-testid="push-error">
-                {pushError}
-              </div>
-            ) : null}
-            {pushInfo ? (
-              <div style={{ color: '#166534', marginBottom: 8 }} data-testid="push-info">
-                {pushInfo}
-              </div>
-            ) : null}
-
-            <div style={{ fontSize: 12, color: '#334155', marginBottom: 6 }}>
-              <b>{t.pushPermBrowser}:</b> {browserNotifPermission}
-            </div>
-            {pushConsent ? (
-              <div style={{ fontSize: 12, color: '#334155', marginBottom: 4 }}>
-                <b>{t.pushPermServer}:</b> {pushConsent.push_permission_status}
-                {pushConsent.consent_timestamp ? ` · ${pushConsent.consent_timestamp}` : ''}
-              </div>
-            ) : null}
-            {pushConsent ? (
-              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>
-                {t.pushHasSub}: {pushConsent.has_subscription ? (lang === 'zh' ? '是' : 'yes') : lang === 'zh' ? '否' : 'no'}
-                {pushConsent.last_subscription_at_utc ? ` · ${pushConsent.last_subscription_at_utc}` : ''}
-              </div>
-            ) : null}
-            {pushStatus ? (
-              <div style={{ fontSize: 12, color: '#64748b' }}>
-                {t.pushSubCount}: {pushStatus.subscription_count} · {pushStatus.vapid_configured ? t.pushVapidOk : t.pushVapidNo}
-              </div>
-            ) : null}
           </div>
         </>
       )}

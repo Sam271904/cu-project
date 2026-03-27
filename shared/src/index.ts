@@ -5,7 +5,7 @@ export {
   EvidenceRefSchema,
   EvidenceLinkSchema,
 } from './schemas/evidence';
-export { ChangePolicySchema, ChangeTypeSchema, DecisionSignalsSchema } from './schemas/signals';
+export { ChangePolicySchema, DecisionSignalsSchema } from './schemas/signals';
 export { ClusterSchema } from './schemas/cluster';
 
 export type {

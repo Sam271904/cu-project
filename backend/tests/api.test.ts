@@ -65,6 +65,8 @@ describe('backend api', () => {
     dbPath = path.join(os.tmpdir(), `e-cu-backend-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
     process.env.DATABASE_URL = `sqlite:${dbPath}`;
     process.env.PIH_PUSH_ENABLED = 'true';
+    // Disable HN adapter — tests use mock RSS servers only; real HN Firebase calls cause timeouts.
+    process.env.PIH_HN_ENABLED = 'false';
     db = openDb({ databaseUrl: process.env.DATABASE_URL });
 
     server = createServer();
